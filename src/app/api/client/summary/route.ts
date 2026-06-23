@@ -90,14 +90,7 @@ export async function GET(req: Request) {
 
   const [teamMember] = await db.select().from(users).where(and(isNotNull(users.googleAccessToken), eq(users.role, "super_admin"))).limit(1)
 
-  let accessToken: string | null = null
-  if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
-    try {
-      const { getServiceAccountToken } = await import("@/lib/google/service-account")
-      accessToken = await getServiceAccountToken()
-    } catch { /* fall through */ }
-  }
-  if (!accessToken) accessToken = teamMember?.googleAccessToken ?? null
+  const accessToken = teamMember?.googleAccessToken ?? null
   if (!accessToken) return NextResponse.json({ error: "No Google account connected" }, { status: 400 })
 
   const { startDate, endDate } = getDateRange(range)

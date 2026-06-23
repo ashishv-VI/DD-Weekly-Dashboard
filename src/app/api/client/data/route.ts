@@ -8,24 +8,9 @@ import { eq, isNotNull, and } from "drizzle-orm"
 import { getGSCMetrics, getTopKeywords, getLandingPages } from "@/lib/google/gsc"
 import { getGA4Metrics, getDeviceBreakdown, getCountryTraffic } from "@/lib/google/ga4"
 import { getDateRange } from "@/lib/dateRange"
-import { getServiceAccountToken } from "@/lib/google/service-account"
-
-async function getAccessToken(fallbackTeamMember: { googleAccessToken: string | null; googleRefreshToken: string | null; email: string } | undefined): Promise<string | null> {
-  // Try service account first (preferred â€” never expires)
-  if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
-    try {
-      return await getServiceAccountToken()
-    } catch (e) {
-      console.error("[client/data] service account token failed:", e instanceof Error ? e.message : String(e))
-    }
-  }
-
-  // Fallback: OAuth token from DB
-  if (fallbackTeamMember?.googleAccessToken) {
-    return fallbackTeamMember.googleAccessToken
-  }
-
-  return null
+// Uses super_admin's OAuth token — the account that has access to all client properties
+function getAccessToken(superAdmin: { googleAccessToken: string | null } | undefined): string | null {
+  return superAdmin?.googleAccessToken ?? null
 }
 
 async function notifyAdmin(clientName: string) {
