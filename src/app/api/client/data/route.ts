@@ -74,27 +74,32 @@ export async function GET(req: Request) {
   let accessToken = teamMember.googleAccessToken
   const { startDate, endDate } = getDateRange(range)
 
-  async function safe<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
-    try { return await fn() } catch { return fallback }
+  console.log(`[client/data] client=${client.name} gscUrl=${client.gscSiteUrl} ga4=${client.ga4PropertyId} hasToken=${!!accessToken} hasRefresh=${!!teamMember.googleRefreshToken}`)
+
+  async function safe<T>(label: string, fn: () => Promise<T>, fallback: T): Promise<T> {
+    try { return await fn() } catch (e) {
+      console.error(`[client/data] ${label} failed:`, e instanceof Error ? e.message : String(e))
+      return fallback
+    }
   }
 
   const runAll = (tok: string) => Promise.all([
-    safe(() => client.gscSiteUrl
+    safe("gsc-metrics", () => client.gscSiteUrl
       ? getGSCMetrics(tok, client.gscSiteUrl!, startDate, endDate)
       : Promise.resolve(null), null),
-    safe(() => client.ga4PropertyId
+    safe("ga4-metrics", () => client.ga4PropertyId
       ? getGA4Metrics(tok, client.ga4PropertyId!, startDate, endDate)
       : Promise.resolve(null), null),
-    safe(() => client.gscSiteUrl
+    safe("gsc-keywords", () => client.gscSiteUrl
       ? getTopKeywords(tok, client.gscSiteUrl!, startDate, endDate, 25)
       : Promise.resolve([]), [] as Awaited<ReturnType<typeof getTopKeywords>>),
-    safe(() => client.gscSiteUrl
+    safe("gsc-pages", () => client.gscSiteUrl
       ? getLandingPages(tok, client.gscSiteUrl!, startDate, endDate, 25)
       : Promise.resolve([]), [] as Awaited<ReturnType<typeof getLandingPages>>),
-    safe(() => client.ga4PropertyId
+    safe("ga4-devices", () => client.ga4PropertyId
       ? getDeviceBreakdown(tok, client.ga4PropertyId!, startDate, endDate)
       : Promise.resolve([]), [] as Awaited<ReturnType<typeof getDeviceBreakdown>>),
-    safe(() => client.ga4PropertyId
+    safe("ga4-countries", () => client.ga4PropertyId
       ? getCountryTraffic(tok, client.ga4PropertyId!, startDate, endDate)
       : Promise.resolve([]), [] as Awaited<ReturnType<typeof getCountryTraffic>>),
   ])
