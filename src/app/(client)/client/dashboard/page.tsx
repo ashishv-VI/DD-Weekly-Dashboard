@@ -119,13 +119,16 @@ export default function ClientDashboard() {
     setLoading(true)
     setError(null)
     fetch(`/api/client/data?range=${range}`)
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error(`Server error ${r.status}`)
+        return r.json()
+      })
       .then(d => {
         if (d.error) setError(d.error)
-        else setData(d)
+        else { setData(d); setError(null) }
         setLoading(false)
       })
-      .catch(() => { setError("Failed to load data"); setLoading(false) })
+      .catch((e) => { setError(e.message ?? "Failed to load data"); setLoading(false) })
   }, [client, range])
 
   const handleLogout = async () => {

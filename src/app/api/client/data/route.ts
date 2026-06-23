@@ -41,25 +41,30 @@ export async function GET(req: Request) {
 
   const { startDate, endDate } = getDateRange(range)
 
+  // Wrap every call individually — one failure won't break the whole response
+  async function safe<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
+    try { return await fn() } catch { return fallback }
+  }
+
   const [gsc, ga4, keywords, pages, devices, countries] = await Promise.all([
-    client.gscSiteUrl
+    safe(() => client.gscSiteUrl
       ? getGSCMetrics(accessToken, client.gscSiteUrl, startDate, endDate)
-      : Promise.resolve(null),
-    client.ga4PropertyId
+      : Promise.resolve(null), null),
+    safe(() => client.ga4PropertyId
       ? getGA4Metrics(accessToken, client.ga4PropertyId, startDate, endDate)
-      : Promise.resolve(null),
-    client.gscSiteUrl
+      : Promise.resolve(null), null),
+    safe(() => client.gscSiteUrl
       ? getTopKeywords(accessToken, client.gscSiteUrl, startDate, endDate, 25)
-      : Promise.resolve([]),
-    client.gscSiteUrl
+      : Promise.resolve([]), []),
+    safe(() => client.gscSiteUrl
       ? getLandingPages(accessToken, client.gscSiteUrl, startDate, endDate, 25)
-      : Promise.resolve([]),
-    client.ga4PropertyId
+      : Promise.resolve([]), []),
+    safe(() => client.ga4PropertyId
       ? getDeviceBreakdown(accessToken, client.ga4PropertyId, startDate, endDate)
-      : Promise.resolve([]),
-    client.ga4PropertyId
+      : Promise.resolve([]), []),
+    safe(() => client.ga4PropertyId
       ? getCountryTraffic(accessToken, client.ga4PropertyId, startDate, endDate)
-      : Promise.resolve([]),
+      : Promise.resolve([]), []),
   ])
 
   return NextResponse.json({ gsc, ga4, keywords, pages, devices, countries })
