@@ -21,6 +21,10 @@ interface PageRow { url: string; clicks: number; impressions: number; ctr: numbe
 interface DeviceRow { device: string; sessions: number; users: number }
 interface CountryRow { country: string; sessions: number; users: number }
 
+interface PageSpeedMetrics { score: number; lcp: string; cls: string; fcp: string; tbt: string; si: string }
+interface PageSpeedData { mobile: PageSpeedMetrics; desktop: PageSpeedMetrics }
+interface SitemapEntry { path: string; submitted: number; indexed: number; lastSubmitted: string; warnings: number; errors: number }
+
 interface ApiData {
   gsc?: { totals: GSCTotals; daily: DailyRow[] } | null
   ga4?: { totals: GA4Totals; daily: DailyRow[] } | null
@@ -97,7 +101,11 @@ export default function ClientDashboard() {
   const [loading, setLoading] = useState(true)
   const [range, setRange] = useState("30d")
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<"overview" | "keywords" | "pages" | "traffic">("overview")
+  const [activeTab, setActiveTab] = useState<"overview" | "keywords" | "pages" | "traffic" | "health">("overview")
+  const [pagespeed, setPagespeed] = useState<PageSpeedData | null>(null)
+  const [psLoading, setPsLoading] = useState(false)
+  const [summary, setSummary] = useState<string | null>(null)
+  const [summaryLoading, setSummaryLoading] = useState(false)
 
   useEffect(() => {
     fetch("/api/client/me").then(r => {
@@ -151,8 +159,31 @@ export default function ClientDashboard() {
     { key: "overview", label: "Overview" },
     { key: "keywords", label: `Keywords${keywords.length ? ` (${keywords.length})` : ""}` },
     { key: "pages", label: `Top Pages${pages.length ? ` (${pages.length})` : ""}` },
-    { key: "traffic", label: "Traffic Sources" },
+    { key: "traffic", label: "Traffic" },
+    { key: "health", label: "Site Health" },
   ] as const
+
+  const handleHealthTab = () => {
+    setActiveTab("health")
+    if (!pagespeed && !psLoading) {
+      setPsLoading(true)
+      fetch("/api/client/pagespeed")
+        .then(r => r.json())
+        .then(d => { if (!d.error) setPagespeed(d) })
+        .finally(() => setPsLoading(false))
+    }
+  }
+
+  const loadSummary = () => {
+    if (summary || summaryLoading) return
+    setSummaryLoading(true)
+    fetch(`/api/client/summary?range=${range}`)
+      .then(r => r.json())
+      .then(d => { if (d.summary) setSummary(d.summary) })
+      .finally(() => setSummaryLoading(false))
+  }
+
+  const handlePrint = () => window.print()
 
   return (
     <div className="min-h-screen" style={{ background: "#f8fafc" }}>
@@ -175,6 +206,10 @@ export default function ClientDashboard() {
             <option value="30d">Last 30 days</option>
             <option value="90d">Last 90 days</option>
           </select>
+          <button onClick={handlePrint}
+            className="text-sm bg-gray-900 text-white px-3 py-1.5 rounded-lg hover:bg-gray-700 transition-colors font-medium">
+            ⬇ PDF
+          </button>
           <button onClick={handleLogout} className="text-sm text-gray-400 hover:text-red-500 transition-colors">Sign out</button>
         </div>
       </header>
@@ -190,9 +225,10 @@ export default function ClientDashboard() {
         )}
 
         {/* TABS */}
-        <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-8 w-fit">
+        <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-8 w-fit flex-wrap print:hidden">
           {tabs.map(t => (
-            <button key={t.key} onClick={() => setActiveTab(t.key)}
+            <button key={t.key}
+              onClick={() => t.key === "health" ? handleHealthTab() : setActiveTab(t.key)}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 activeTab === t.key
                   ? "bg-white text-gray-900 shadow-sm"
@@ -283,7 +319,6 @@ export default function ClientDashboard() {
                       </div>
                       <div className="text-xs text-purple-600 font-bold">Avg {gsc?.position.toFixed(1) ?? "—"}</div>
                     </div>
-                    {/* Inverted bar: lower position = taller bar */}
                     <div className="flex items-end gap-0.5 h-14">
                       {posChart.map((v, i) => {
                         const maxPos = Math.max(...posChart, 1)
@@ -297,9 +332,37 @@ export default function ClientDashboard() {
                         )
                       })}
                     </div>
-                    <div className="text-xs text-gray-400 mt-2">Each bar = one day. Taller = better ranking</div>
+                    <div className="text-xs text-gray-400 mt-2">Taller bar = better ranking position</div>
                   </div>
                 )}
+
+                {/* AI Summary Card */}
+                <div className="bg-gradient-to-br from-slate-900 to-blue-950 rounded-2xl p-6 shadow-sm">
+                  <div className="flex items-start justify-between mb-4">
+                    <div>
+                      <div className="text-xs font-bold text-blue-300 uppercase tracking-widest mb-1">AI Summary</div>
+                      <div className="text-sm font-semibold text-white">Performance Overview</div>
+                    </div>
+                    {!summary && !summaryLoading && (
+                      <button onClick={loadSummary}
+                        className="text-xs bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg transition-colors font-medium">
+                        Generate
+                      </button>
+                    )}
+                  </div>
+                  {summaryLoading && (
+                    <div className="flex items-center gap-2 text-blue-300 text-sm">
+                      <div className="w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                      Generating summary...
+                    </div>
+                  )}
+                  {summary && (
+                    <p className="text-sm text-blue-100 leading-relaxed">{summary}</p>
+                  )}
+                  {!summary && !summaryLoading && (
+                    <p className="text-sm text-blue-400 opacity-60">Click Generate to get an AI-written summary of this period&apos;s SEO performance.</p>
+                  )}
+                </div>
 
               </div>
             )}
@@ -494,7 +557,81 @@ export default function ClientDashboard() {
           </>
         )}
 
-        <div className="text-center text-xs text-gray-300 mt-12">
+            {/* ── SITE HEALTH TAB ── */}
+            {activeTab === "health" && (
+              <div className="space-y-6">
+
+                {/* Page Speed */}
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                  <SectionLabel color="#f59e0b">Page Speed Score</SectionLabel>
+
+                  {psLoading && (
+                    <div className="flex items-center gap-3 text-gray-400 text-sm py-4">
+                      <div className="w-5 h-5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                      Analysing site speed — this takes 10–20 seconds...
+                    </div>
+                  )}
+
+                  {!psLoading && !pagespeed && (
+                    <div className="text-sm text-gray-400 py-4">
+                      Click the Site Health tab to load your page speed scores.
+                    </div>
+                  )}
+
+                  {pagespeed && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {(["mobile", "desktop"] as const).map(device => {
+                        const m = pagespeed[device]
+                        const scoreColor = m.score >= 90 ? "#16a34a" : m.score >= 50 ? "#d97706" : "#dc2626"
+                        const scoreBg = m.score >= 90 ? "#dcfce7" : m.score >= 50 ? "#fef3c7" : "#fee2e2"
+                        return (
+                          <div key={device} className="border border-gray-100 rounded-xl p-5">
+                            <div className="flex items-center justify-between mb-4">
+                              <div className="font-semibold text-gray-700 capitalize">{device}</div>
+                              <div className="flex items-center gap-2">
+                                <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold"
+                                  style={{ background: scoreBg, color: scoreColor }}>
+                                  {m.score}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              {[
+                                { label: "First Contentful Paint", value: m.fcp, desc: "How fast first content appears" },
+                                { label: "Largest Contentful Paint", value: m.lcp, desc: "Main content load time (LCP)" },
+                                { label: "Total Blocking Time", value: m.tbt, desc: "JavaScript blocking (TBT)" },
+                                { label: "Cumulative Layout Shift", value: m.cls, desc: "Visual stability (CLS)" },
+                                { label: "Speed Index", value: m.si, desc: "How quickly content is visible" },
+                              ].map(row => (
+                                <div key={row.label} className="flex justify-between items-center py-1.5 border-b border-gray-50">
+                                  <div>
+                                    <div className="text-xs font-medium text-gray-700">{row.label}</div>
+                                    <div className="text-xs text-gray-400">{row.desc}</div>
+                                  </div>
+                                  <div className="text-sm font-bold text-gray-900 ml-4 shrink-0">{row.value}</div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Score guide */}
+                {pagespeed && (
+                  <div className="flex gap-4 text-xs text-gray-500">
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block"></span> 90–100 Fast</span>
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block"></span> 50–89 Needs Work</span>
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block"></span> 0–49 Slow</span>
+                  </div>
+                )}
+
+              </div>
+            )}
+
+        <div className="text-center text-xs text-gray-300 mt-12 print:hidden">
           Powered by Damco Digital · Google Search Console & Analytics
         </div>
       </div>

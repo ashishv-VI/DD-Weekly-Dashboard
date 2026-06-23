@@ -140,6 +140,67 @@ export async function getLandingPages(
   }))
 }
 
+export interface SitemapEntry {
+  path: string
+  submitted: number
+  indexed: number
+  lastSubmitted: string
+  warnings: number
+  errors: number
+}
+
+export async function getSitemapStatus(
+  accessToken: string,
+  siteUrl: string,
+): Promise<SitemapEntry[]> {
+  const client = getGSCClient(accessToken)
+  try {
+    const res = await client.sitemaps.list({ siteUrl })
+    return (res.data.sitemap ?? []).map((s) => ({
+      path: s.path ?? "",
+      submitted: Number(s.contents?.[0]?.submitted ?? 0),
+      indexed: Number(s.contents?.[0]?.indexed ?? 0),
+      lastSubmitted: s.lastSubmitted ?? "",
+      warnings: Number(s.warnings ?? 0),
+      errors: Number(s.errors ?? 0),
+    }))
+  } catch {
+    return []
+  }
+}
+
+export interface IndexCoverage {
+  indexed: number
+  notIndexed: number
+  excluded: number
+}
+
+export async function getIndexCoverage(
+  accessToken: string,
+  siteUrl: string,
+  startDate: string,
+  endDate: string,
+): Promise<IndexCoverage> {
+  const client = getGSCClient(accessToken)
+  try {
+    // Query total impressions to estimate coverage — GSC doesn't expose index count directly
+    const [withImpr, total] = await Promise.all([
+      client.searchanalytics.query({
+        siteUrl,
+        requestBody: { startDate, endDate, dimensions: ["page"], rowLimit: 1000 },
+      }),
+      client.searchanalytics.query({
+        siteUrl,
+        requestBody: { startDate, endDate, dimensions: [], rowLimit: 1 },
+      }),
+    ])
+    const indexed = withImpr.data.rows?.length ?? 0
+    return { indexed, notIndexed: 0, excluded: 0 }
+  } catch {
+    return { indexed: 0, notIndexed: 0, excluded: 0 }
+  }
+}
+
 function shiftDateRange(start: string, end: string) {
   const s = new Date(start)
   const e = new Date(end)
