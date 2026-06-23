@@ -100,6 +100,53 @@ export async function getGA4Metrics(
   return { totals, daily }
 }
 
+export async function getDeviceBreakdown(
+  accessToken: string,
+  propertyId: string,
+  startDate: string,
+  endDate: string,
+) {
+  const client = getAnalyticsClient(accessToken)
+  const res = await client.properties.runReport({
+    property: `properties/${propertyId}`,
+    requestBody: {
+      dateRanges: [{ startDate, endDate }],
+      dimensions: [{ name: "deviceCategory" }],
+      metrics: [{ name: "sessions" }, { name: "totalUsers" }],
+      orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
+    },
+  })
+  return (res.data.rows ?? []).map((r) => ({
+    device: r.dimensionValues?.[0]?.value ?? "Unknown",
+    sessions: Number(r.metricValues?.[0]?.value ?? 0),
+    users: Number(r.metricValues?.[1]?.value ?? 0),
+  }))
+}
+
+export async function getCountryTraffic(
+  accessToken: string,
+  propertyId: string,
+  startDate: string,
+  endDate: string,
+) {
+  const client = getAnalyticsClient(accessToken)
+  const res = await client.properties.runReport({
+    property: `properties/${propertyId}`,
+    requestBody: {
+      dateRanges: [{ startDate, endDate }],
+      dimensions: [{ name: "country" }],
+      metrics: [{ name: "sessions" }, { name: "totalUsers" }],
+      orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
+      limit: 10,
+    },
+  })
+  return (res.data.rows ?? []).map((r) => ({
+    country: r.dimensionValues?.[0]?.value ?? "Unknown",
+    sessions: Number(r.metricValues?.[0]?.value ?? 0),
+    users: Number(r.metricValues?.[1]?.value ?? 0),
+  }))
+}
+
 export async function getChannelBreakdown(
   accessToken: string,
   propertyId: string,

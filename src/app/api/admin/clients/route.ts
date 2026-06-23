@@ -21,7 +21,9 @@ export async function POST(req: Request) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const body = await req.json()
-  const { name, domain, username, pin, ga4PropertyId, gscSiteUrl, notes } = body
+  const { name, domain, ga4PropertyId, gscSiteUrl, notes } = body
+  const username = (body.username || "").trim()
+  const pin = (body.pin || "").trim()
 
   if (!name || !domain || !username || !pin) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
