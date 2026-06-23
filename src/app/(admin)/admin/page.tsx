@@ -117,20 +117,29 @@ export default async function AdminDashboard() {
         </div>
       </div>
 
-      {/* Alerts */}
-      {unreadNotifs.length > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 mb-8">
-          <h2 className="font-semibold text-amber-900 mb-3 text-sm">⚠ Alerts ({unreadNotifs.length})</h2>
-          {unreadNotifs.map(n => (
-            <div key={n.id} className="text-sm text-amber-800 mb-1">• {n.message}</div>
-          ))}
+      {/* Token expired alert — shown prominently so admin can re-connect */}
+      {unreadNotifs.some(n => n.type === "token_expired") && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-5 mb-6 flex items-center justify-between">
+          <div>
+            <div className="font-semibold text-red-800 text-sm mb-1">🔑 Google Re-connection Required</div>
+            <div className="text-sm text-red-700">
+              Client data is not loading because the Google access token expired. Sign out and sign in again to fix.
+            </div>
+          </div>
+          <a href="/login"
+            className="ml-6 shrink-0 bg-red-600 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-red-700 transition-colors">
+            Reconnect Google →
+          </a>
         </div>
       )}
 
-      {/* No token warning */}
-      {!accessToken && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-8 text-sm text-blue-700">
-          ℹ Health scores need Google account connected. Visit any client page after logging in with Google.
+      {/* Other alerts */}
+      {unreadNotifs.filter(n => n.type !== "token_expired").length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 mb-8">
+          <h2 className="font-semibold text-amber-900 mb-3 text-sm">⚠ Alerts ({unreadNotifs.filter(n => n.type !== "token_expired").length})</h2>
+          {unreadNotifs.filter(n => n.type !== "token_expired").map(n => (
+            <div key={n.id} className="text-sm text-amber-800 mb-1">• {n.message}</div>
+          ))}
         </div>
       )}
 

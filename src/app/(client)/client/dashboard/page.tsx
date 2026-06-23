@@ -33,6 +33,7 @@ interface ApiData {
   devices?: DeviceRow[]
   countries?: CountryRow[]
   error?: string
+  warning?: string
 }
 
 function fmt(n: number | undefined | null) {
@@ -100,7 +101,6 @@ export default function ClientDashboard() {
   const [data, setData] = useState<ApiData | null>(null)
   const [loading, setLoading] = useState(true)
   const [range, setRange] = useState("30d")
-  const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<"overview" | "keywords" | "pages" | "traffic" | "health">("overview")
   const [pagespeed, setPagespeed] = useState<PageSpeedData | null>(null)
   const [psLoading, setPsLoading] = useState(false)
@@ -117,22 +117,22 @@ export default function ClientDashboard() {
   useEffect(() => {
     if (!client) return
     setLoading(true)
-    setError(null)
     fetch(`/api/client/data?range=${range}`)
       .then(r => {
         if (!r.ok) throw new Error(`Server error ${r.status}`)
         return r.json()
       })
       .then(d => {
-        if (d.error) setError(d.error)
-        else {
+        if (d.error) {
+          // Never show internal errors to client — silently set empty data
+          setData({})
+        } else {
           setData(d)
-          if (d.warning) setError(d.warning)
-          else setError(null)
+          // warning = token issue — don't expose to client, data will show as "—"
         }
         setLoading(false)
       })
-      .catch((e) => { setError(e.message ?? "Failed to load data"); setLoading(false) })
+      .catch(() => { setData({}); setLoading(false) })
   }, [client, range])
 
   const handleLogout = async () => {
@@ -227,9 +227,7 @@ export default function ClientDashboard() {
           <p className="text-sm text-gray-400 mt-1">Google Search Console · Google Analytics 4</p>
         </div>
 
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 text-sm text-red-700">⚠ {error}</div>
-        )}
+        {/* errors are handled silently — never exposed to client */}
 
         {/* TABS */}
         <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-8 w-fit flex-wrap print:hidden">

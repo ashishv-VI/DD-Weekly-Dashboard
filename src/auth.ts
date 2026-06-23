@@ -31,13 +31,11 @@ export const authOptions: NextAuthOptions = {
       try {
         const [existing] = await db.select().from(users).where(eq(users.email, user.email)).limit(1)
         if (existing) {
-          // Update token on every login
           await db.update(users).set({
             googleAccessToken: account?.access_token ?? existing.googleAccessToken,
             googleRefreshToken: account?.refresh_token ?? existing.googleRefreshToken,
           }).where(eq(users.email, user.email))
         } else {
-          // First user = super_admin, rest = seo_team
           const [any] = await db.select().from(users).limit(1)
           await db.insert(users).values({
             name: user.name ?? user.email,
@@ -55,13 +53,63 @@ export const authOptions: NextAuthOptions = {
     },
     async jwt({ token, account }) {
       if (account) {
+        // Fresh login — store all token info
         token.accessToken = account.access_token
         token.refreshToken = account.refresh_token
+        token.expiresAt = account.expires_at ? account.expires_at * 1000 : Date.now() + 3600 * 1000
+        return token
       }
-      return token
+
+      // Token still valid (5 min buffer before expiry)?
+      if (token.expiresAt && Date.now() < (token.expiresAt as number) - 5 * 60 * 1000) {
+        return token
+      }
+
+      // Token expired — try silent refresh using refresh token
+      if (!token.refreshToken) return { ...token, error: "NoRefreshToken" }
+
+      try {
+        const res = await fetch("https://oauth2.googleapis.com/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            client_id: process.env.GOOGLE_CLIENT_ID!,
+            client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+            grant_type: "refresh_token",
+            refresh_token: token.refreshToken as string,
+          }),
+        })
+
+        const refreshed = await res.json()
+        if (!res.ok) throw new Error(refreshed.error ?? "refresh_failed")
+
+        const newToken = {
+          ...token,
+          accessToken: refreshed.access_token as string,
+          expiresAt: Date.now() + (refreshed.expires_in as number) * 1000,
+          error: undefined,
+        }
+
+        // Persist fresh access token to DB so /api/client/data picks it up
+        if (token.email) {
+          try {
+            await db.update(users)
+              .set({ googleAccessToken: refreshed.access_token as string })
+              .where(eq(users.email, token.email as string))
+          } catch (dbErr) {
+            console.error("DB token update error:", dbErr)
+          }
+        }
+
+        return newToken
+      } catch (e) {
+        console.error("Token refresh failed:", e)
+        return { ...token, error: "RefreshAccessTokenError" }
+      }
     },
     async session({ session, token }) {
       session.accessToken = token.accessToken as string
+      if (token.error) session.error = token.error as string
       return session
     },
   },

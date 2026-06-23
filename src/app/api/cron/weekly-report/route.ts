@@ -11,8 +11,34 @@ import { Resend } from "resend"
 
 const ADMIN_EMAIL = process.env.REPORT_TO_EMAIL ?? "damcodigitalseo@gmail.com"
 
+async function getValidToken(teamMember: { googleAccessToken: string | null; googleRefreshToken: string | null; email: string }): Promise<string | null> {
+  if (!teamMember.googleAccessToken) return null
+
+  // Try refresh if refresh token available
+  if (teamMember.googleRefreshToken) {
+    try {
+      const res = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: process.env.GOOGLE_CLIENT_ID!,
+          client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+          grant_type: "refresh_token",
+          refresh_token: teamMember.googleRefreshToken,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok && data.access_token) {
+        await db.update(users).set({ googleAccessToken: data.access_token as string }).where(eq(users.email, teamMember.email))
+        return data.access_token as string
+      }
+    } catch { /* fall through to stored token */ }
+  }
+
+  return teamMember.googleAccessToken
+}
+
 export async function GET(req: Request) {
-  // Verify this is called by Vercel Cron or with the secret
   const authHeader = req.headers.get("authorization")
   const cronSecret = process.env.CRON_SECRET
   if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
@@ -20,11 +46,14 @@ export async function GET(req: Request) {
   }
 
   const [teamMember] = await db.select().from(users).where(isNotNull(users.googleAccessToken)).limit(1)
-  if (!teamMember?.googleAccessToken) {
-    return NextResponse.json({ error: "No Google access token" }, { status: 400 })
+  if (!teamMember) {
+    return NextResponse.json({ error: "No Google account connected" }, { status: 400 })
   }
 
-  const accessToken = teamMember.googleAccessToken
+  const accessToken = await getValidToken(teamMember)
+  if (!accessToken) {
+    return NextResponse.json({ error: "No Google access token" }, { status: 400 })
+  }
   const resend = new Resend(process.env.RESEND_API_KEY ?? "placeholder")
   const allClients = await db.select().from(clients).where(eq(clients.status, "active"))
   const { startDate, endDate } = getDateRange("7d")
