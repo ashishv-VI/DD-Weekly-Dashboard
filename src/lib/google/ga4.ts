@@ -137,10 +137,9 @@ export async function getCountryTraffic(
       dimensions: [{ name: "country" }],
       metrics: [{ name: "sessions" }, { name: "totalUsers" }],
       orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
-      limit: 10,
     },
   })
-  return (res.data.rows ?? []).map((r) => ({
+  return (res.data.rows ?? []).slice(0, 10).map((r) => ({
     country: r.dimensionValues?.[0]?.value ?? "Unknown",
     sessions: Number(r.metricValues?.[0]?.value ?? 0),
     users: Number(r.metricValues?.[1]?.value ?? 0),
