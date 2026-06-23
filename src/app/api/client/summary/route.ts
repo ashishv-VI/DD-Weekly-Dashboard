@@ -4,7 +4,7 @@ import { cookies } from "next/headers"
 import { verifyClientToken, COOKIE_NAME } from "@/lib/auth/client-auth"
 import { db } from "@/lib/db"
 import { clients, users } from "@/lib/db/schema"
-import { eq, isNotNull } from "drizzle-orm"
+import { eq, isNotNull, and } from "drizzle-orm"
 import { getGSCMetrics, getTopKeywords } from "@/lib/google/gsc"
 import { getGA4Metrics } from "@/lib/google/ga4"
 import { getDateRange } from "@/lib/dateRange"
@@ -88,8 +88,16 @@ export async function GET(req: Request) {
   const [client] = await db.select().from(clients).where(eq(clients.id, payload.sub)).limit(1)
   if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 })
 
-  const [teamMember] = await db.select().from(users).where(isNotNull(users.googleAccessToken)).limit(1)
-  const accessToken = teamMember?.googleAccessToken
+  const [teamMember] = await db.select().from(users).where(and(isNotNull(users.googleAccessToken), eq(users.role, "super_admin"))).limit(1)
+
+  let accessToken: string | null = null
+  if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
+    try {
+      const { getServiceAccountToken } = await import("@/lib/google/service-account")
+      accessToken = await getServiceAccountToken()
+    } catch { /* fall through */ }
+  }
+  if (!accessToken) accessToken = teamMember?.googleAccessToken ?? null
   if (!accessToken) return NextResponse.json({ error: "No Google account connected" }, { status: 400 })
 
   const { startDate, endDate } = getDateRange(range)

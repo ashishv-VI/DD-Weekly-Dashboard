@@ -45,14 +45,24 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const [teamMember] = await db.select().from(users).where(isNotNull(users.googleAccessToken)).limit(1)
-  if (!teamMember) {
-    return NextResponse.json({ error: "No Google account connected" }, { status: 400 })
+  let accessToken: string | null = null
+
+  // Try service account first (preferred)
+  if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
+    try {
+      const { getServiceAccountToken } = await import("@/lib/google/service-account")
+      accessToken = await getServiceAccountToken()
+    } catch { /* fall through */ }
   }
 
-  const accessToken = await getValidToken(teamMember)
+  // Fallback to OAuth token
   if (!accessToken) {
-    return NextResponse.json({ error: "No Google access token" }, { status: 400 })
+    const [teamMember] = await db.select().from(users).where(isNotNull(users.googleAccessToken)).limit(1)
+    if (teamMember) accessToken = await getValidToken(teamMember)
+  }
+
+  if (!accessToken) {
+    return NextResponse.json({ error: "No Google access token available" }, { status: 400 })
   }
   const resend = new Resend(process.env.RESEND_API_KEY ?? "placeholder")
   const allClients = await db.select().from(clients).where(eq(clients.status, "active"))

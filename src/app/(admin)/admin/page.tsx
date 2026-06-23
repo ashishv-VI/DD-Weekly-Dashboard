@@ -1,6 +1,6 @@
 import { db } from "@/lib/db"
 import { clients, notifications, users } from "@/lib/db/schema"
-import { eq, desc, isNotNull } from "drizzle-orm"
+import { eq, desc, isNotNull, and } from "drizzle-orm"
 import Link from "next/link"
 import { getGSCMetrics } from "@/lib/google/gsc"
 import { getDateRange } from "@/lib/dateRange"
@@ -43,7 +43,7 @@ export default async function AdminDashboard() {
   const [allClients, unreadNotifs, teamMember] = await Promise.all([
     db.select().from(clients).orderBy(desc(clients.createdAt)),
     db.select().from(notifications).where(eq(notifications.read, false)).orderBy(desc(notifications.createdAt)).limit(10),
-    db.select().from(users).where(isNotNull(users.googleAccessToken)).limit(1),
+    db.select().from(users).where(and(isNotNull(users.googleAccessToken), eq(users.role, "super_admin"))).limit(1),
   ])
 
   const accessToken = teamMember[0]?.googleAccessToken ?? null
