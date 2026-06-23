@@ -9,7 +9,6 @@ import { getDateRange } from "@/lib/dateRange"
 import { weeklyReportHtml, weeklyReportText } from "@/lib/email/template"
 import { Resend } from "resend"
 
-const resend = new Resend(process.env.RESEND_API_KEY)
 const ADMIN_EMAIL = process.env.REPORT_TO_EMAIL ?? "damcodigitalseo@gmail.com"
 
 export async function GET(req: Request) {
@@ -26,6 +25,7 @@ export async function GET(req: Request) {
   }
 
   const accessToken = teamMember.googleAccessToken
+  const resend = new Resend(process.env.RESEND_API_KEY ?? "placeholder")
   const allClients = await db.select().from(clients).where(eq(clients.status, "active"))
   const { startDate, endDate } = getDateRange("7d")
 
@@ -47,8 +47,10 @@ export async function GET(req: Request) {
 
       const clickTrend = gscT && gscT.prevClicks > 0
         ? ((gscT.clicks - gscT.prevClicks) / gscT.prevClicks) * 100 : 0
-      const sessionTrend = ga4T && ga4T.prevSessions > 0
-        ? ((ga4T.sessions - ga4T.prevSessions) / ga4T.prevSessions) * 100 : 0
+      const ga4Sessions = ga4T?.sessions ?? 0
+      const ga4PrevSessions = ga4T?.prevSessions ?? 0
+      const sessionTrend = ga4PrevSessions > 0
+        ? ((ga4Sessions - ga4PrevSessions) / ga4PrevSessions) * 100 : 0
 
       const reportData = {
         clientName: client.name,
@@ -58,7 +60,7 @@ export async function GET(req: Request) {
         impressions: gscT?.impressions ?? 0,
         ctr: gscT?.ctr ?? 0,
         position: gscT?.position ?? 0,
-        sessions: ga4T?.sessions ?? 0,
+        sessions: ga4Sessions,
         users: ga4T?.users ?? 0,
         engagementRate: ga4T?.engagementRate ?? 0,
         clickTrend,

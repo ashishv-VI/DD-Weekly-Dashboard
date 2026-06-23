@@ -13,7 +13,7 @@ function generateSummary(
   clientName: string,
   range: string,
   gsc: { totals: { clicks: number; impressions: number; ctr: number; position: number; prevClicks: number; prevImpressions: number } } | null,
-  ga4: { totals: { sessions: number; users: number; engagementRate: number; conversions: number; prevSessions: number } } | null,
+  ga4: { totals: { sessions?: number; users?: number; engagementRate?: number; conversions?: number; prevSessions?: number } } | null,
   topKeyword: string | null,
 ): string {
   const label = range === "7d" ? "this week" : range === "90d" ? "this quarter" : "this month"
@@ -44,16 +44,21 @@ function generateSummary(
 
   if (ga4) {
     const t = ga4.totals
-    const sessionTrend = t.prevSessions > 0 ? ((t.sessions - t.prevSessions) / t.prevSessions) * 100 : 0
+    const sessions = t.sessions ?? 0
+    const users = t.users ?? 0
+    const engagementRate = t.engagementRate ?? 0
+    const conversions = t.conversions ?? 0
+    const prevSessions = t.prevSessions ?? 0
+    const sessionTrend = prevSessions > 0 ? ((sessions - prevSessions) / prevSessions) * 100 : 0
     lines.push(
-      `Website received ${t.sessions.toLocaleString()} sessions from ${t.users.toLocaleString()} users` +
+      `Website received ${sessions.toLocaleString()} sessions from ${users.toLocaleString()} users` +
       (Math.abs(sessionTrend) > 5 ? `, a ${Math.abs(sessionTrend).toFixed(0)}% ${sessionTrend > 0 ? "increase" : "decrease"} vs last period.` : ".")
     )
-    if (t.engagementRate > 0) {
-      lines.push(`Engagement rate was ${t.engagementRate.toFixed(1)}% — visitors are ${t.engagementRate > 50 ? "actively interacting" : "browsing"} with the content.`)
+    if (engagementRate > 0) {
+      lines.push(`Engagement rate was ${engagementRate.toFixed(1)}% — visitors are ${engagementRate > 50 ? "actively interacting" : "browsing"} with the content.`)
     }
-    if (t.conversions > 0) {
-      lines.push(`${t.conversions} conversions recorded this period.`)
+    if (conversions > 0) {
+      lines.push(`${conversions} conversions recorded this period.`)
     }
   }
 
