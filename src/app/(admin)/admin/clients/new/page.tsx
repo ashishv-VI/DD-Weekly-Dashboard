@@ -42,19 +42,19 @@ export default function NewClientPage() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Client Name *</label>
             <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Redwood Interiors" value={form.name} onChange={e => setForm({...form, name: e.target.value})} required />
+              placeholder="e.g. Damco Digital" value={form.name} onChange={e => setForm({...form, name: e.target.value})} required />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Domain *</label>
             <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="redwoodinteriors.in" value={form.domain} onChange={e => setForm({...form, domain: e.target.value})} required />
+              placeholder="e.g. damcodigital.com" value={form.domain} onChange={e => setForm({...form, domain: e.target.value})} required />
           </div>
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Username *</label>
             <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="redwood" value={form.username} onChange={e => setForm({...form, username: e.target.value})} required />
+              placeholder="e.g. damco" value={form.username} onChange={e => setForm({...form, username: e.target.value})} required />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">PIN *</label>
@@ -65,12 +65,12 @@ export default function NewClientPage() {
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">GA4 Property ID</label>
           <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="123456789" value={form.ga4PropertyId} onChange={e => setForm({...form, ga4PropertyId: e.target.value})} />
+            placeholder="e.g. 390504767" value={form.ga4PropertyId} onChange={e => setForm({...form, ga4PropertyId: e.target.value})} />
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">GSC Site URL</label>
           <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="https://www.redwoodinteriors.in/" value={form.gscSiteUrl} onChange={e => setForm({...form, gscSiteUrl: e.target.value})} />
+            placeholder="e.g. https://damcodigital.com/" value={form.gscSiteUrl} onChange={e => setForm({...form, gscSiteUrl: e.target.value})} />
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
