@@ -49,6 +49,14 @@ export default async function AdminDashboard() {
   const accessToken = teamMember[0]?.googleAccessToken ?? null
   const { startDate, endDate } = getDateRange("30d")
 
+  // If token is present, auto-clear old token_expired notifications
+  if (accessToken) {
+    await db.update(notifications)
+      .set({ read: true })
+      .where(eq(notifications.type, "token_expired"))
+      .catch(() => {})
+  }
+
   // Fetch GSC data for each client with a site URL (max 10 to avoid timeout)
   const clientsWithHealth: ClientWithHealth[] = await Promise.all(
     allClients.slice(0, 15).map(async (c) => {
