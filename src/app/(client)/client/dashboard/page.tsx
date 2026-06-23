@@ -125,7 +125,11 @@ export default function ClientDashboard() {
       })
       .then(d => {
         if (d.error) setError(d.error)
-        else { setData(d); setError(null) }
+        else {
+          setData(d)
+          if (d.warning) setError(d.warning)
+          else setError(null)
+        }
         setLoading(false)
       })
       .catch((e) => { setError(e.message ?? "Failed to load data"); setLoading(false) })

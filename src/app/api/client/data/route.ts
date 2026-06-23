@@ -67,5 +67,13 @@ export async function GET(req: Request) {
       : Promise.resolve([]), []),
   ])
 
+  // If both main data sources returned null, the token is likely expired
+  if (!gsc && !ga4) {
+    return NextResponse.json({
+      gsc: null, ga4: null, keywords: [], pages: [], devices: [], countries: [],
+      warning: "Google token may have expired. Ask admin to sign in again.",
+    })
+  }
+
   return NextResponse.json({ gsc, ga4, keywords, pages, devices, countries })
 }
