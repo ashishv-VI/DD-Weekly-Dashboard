@@ -332,18 +332,23 @@ function TrendBadge({ value }: { value: number }) {
 
 type AccentColor = "blue" | "green" | "purple" | "amber" | "slate"
 
-function MetricCard({ label, value, sub, trend, accent = "blue", tooltip }: {
-  label: string; value: string | number; sub?: string; trend?: number; accent?: AccentColor; tooltip?: string
+function MetricCard({ label, value, sub, trend, accent = "blue", tooltip, prevValue }: {
+  label: string; value: string | number; sub?: string; trend?: number; accent?: AccentColor; tooltip?: string; prevValue?: string
 }) {
   const borderColor = { blue: "var(--brand, #2563eb)", green: "#16a34a", purple: "#7c3aed", amber: "#d97706", slate: "#94a3b8" }[accent]
   return (
     <div className="bg-white rounded-xl border border-slate-200 px-5 py-4 relative" style={{ borderLeft: `3px solid ${borderColor}` }} title={tooltip}>
       <div className="text-xs font-medium text-slate-500 mb-1.5">{label}</div>
-      <div className="text-2xl font-semibold text-slate-900 tracking-tight mb-1">{value}</div>
+      <div className="text-3xl font-semibold text-slate-900 tracking-tight mb-1">{value}</div>
       <div className="flex items-center gap-2 flex-wrap">
         {trend !== undefined && <TrendBadge value={trend} />}
         {sub && <span className="text-xs text-slate-400">{sub}</span>}
       </div>
+      {prevValue !== undefined && (
+        <div className="mt-2 pt-2 border-t border-slate-100 text-xs text-slate-400">
+          Prev period: <span className="font-medium text-slate-500">{prevValue}</span>
+        </div>
+      )}
     </div>
   )
 }
@@ -540,20 +545,52 @@ function ExportBtn({ onClick }: { onClick: () => void }) {
   )
 }
 
-function OpportunityCard({ item, priority }: { item: OpportunityItem; priority: "high" | "medium" | "low" }) {
+type OppStatus = "todo" | "in_progress" | "done"
+
+function OpportunityCard({ item, priority, status, onStatusChange }: {
+  item: OpportunityItem; priority: "high" | "medium" | "low"
+  status: OppStatus; onStatusChange: (s: OppStatus) => void
+}) {
   const catColor: Record<string, string> = { SEO: "bg-blue-50 text-blue-700", Content: "bg-violet-50 text-violet-700", UX: "bg-amber-50 text-amber-700", AEO: "bg-emerald-50 text-emerald-700", Keywords: "bg-slate-100 text-slate-700" }
   const impBg = { High: "bg-red-50 text-red-700 border-red-200", Medium: "bg-amber-50 text-amber-700 border-amber-200", Low: "bg-emerald-50 text-emerald-700 border-emerald-200", Growth: "bg-violet-50 text-violet-700 border-violet-200" }[item.impact]
   const dot = { high: "#ef4444", medium: "#f59e0b", low: "#22c55e" }[priority]
+
+  const statusConfig: Record<OppStatus, { label: string; icon: string; activeClass: string }> = {
+    todo: { label: "To Do", icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z", activeClass: "bg-slate-700 text-white border-slate-700" },
+    in_progress: { label: "In Progress", icon: "M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15", activeClass: "bg-amber-500 text-white border-amber-500" },
+    done: { label: "Done", icon: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z", activeClass: "bg-emerald-600 text-white border-emerald-600" },
+  }
+
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-4 flex gap-3">
-      <div className="w-2.5 h-2.5 rounded-full mt-1.5 shrink-0" style={{ background: dot }} />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap mb-1.5">
-          <div className="text-sm font-semibold text-slate-900">{item.title}</div>
-          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${catColor[item.category] ?? "bg-slate-100 text-slate-700"}`}>{item.category}</span>
-          <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${impBg}`}>{item.impact} Impact</span>
+    <div className={`bg-white rounded-xl border p-4 transition-all ${status === "done" ? "border-emerald-200 opacity-75" : "border-slate-200"}`}>
+      <div className="flex gap-3">
+        <div className="w-2.5 h-2.5 rounded-full mt-1.5 shrink-0" style={{ background: dot }} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap mb-1.5">
+            <div className={`text-sm font-semibold ${status === "done" ? "line-through text-slate-400" : "text-slate-900"}`}>{item.title}</div>
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${catColor[item.category] ?? "bg-slate-100 text-slate-700"}`}>{item.category}</span>
+            <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${impBg}`}>{item.impact} Impact</span>
+          </div>
+          <p className="text-xs text-slate-600 leading-relaxed mb-3">{item.desc}</p>
+
+          {/* Status buttons */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-xs text-slate-400 mr-0.5">Status:</span>
+            {(["todo", "in_progress", "done"] as OppStatus[]).map(s => {
+              const cfg = statusConfig[s]
+              const isActive = status === s
+              return (
+                <button key={s} onClick={() => onStatusChange(s)}
+                  className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border font-medium transition-all ${isActive ? cfg.activeClass : "text-slate-500 border-slate-200 hover:bg-slate-50"}`}>
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={cfg.icon}/>
+                  </svg>
+                  {cfg.label}
+                </button>
+              )
+            })}
+          </div>
         </div>
-        <p className="text-xs text-slate-600 leading-relaxed">{item.desc}</p>
       </div>
     </div>
   )
@@ -651,11 +688,31 @@ export default function ClientDashboard() {
   const [kwpPageSize, setKwpPageSize] = useState(10)
   const [pgPage, setPgPage] = useState(0)
   const [pgPageSize, setPgPageSize] = useState(10)
+  const [compare, setCompare] = useState(false)
+  const [oppStatus, setOppStatus] = useState<Record<string, "todo" | "in_progress" | "done">>({})
 
   useEffect(() => {
     fetch("/api/client/me").then(r => { if (!r.ok) { router.push("/client/login"); return null }; return r.json() })
       .then(d => { if (d) setClient(d) })
   }, [router])
+
+  useEffect(() => {
+    if (!client) return
+    try {
+      const stored = localStorage.getItem(`opp_status_${client.id}`)
+      if (stored) setOppStatus(JSON.parse(stored))
+    } catch {}
+  }, [client])
+
+  const setOppStatusFor = (key: string, status: "todo" | "in_progress" | "done") => {
+    setOppStatus(prev => {
+      const next = { ...prev, [key]: status }
+      if (client) { try { localStorage.setItem(`opp_status_${client.id}`, JSON.stringify(next)) } catch {} }
+      return next
+    })
+  }
+
+  const oppKey = (title: string) => title.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "")
 
   useEffect(() => {
     if (!client) return
@@ -783,7 +840,7 @@ export default function ClientDashboard() {
     { key: "keywords", label: "Keywords" },
     { key: "pages", label: "Top Pages" },
     { key: "ai", label: "AI Visibility" },
-    { key: "opportunities", label: "Opportunities", badge: opportunities.high.length },
+    { key: "opportunities", label: "Opportunities", badge: opportunities.high.filter(o => oppStatus[oppKey(o.title)] !== "done").length },
     { key: "engagement", label: "Engagement" },
     { key: "health", label: "Site Health" },
   ]
@@ -832,6 +889,17 @@ export default function ClientDashboard() {
             <DateRangePicker preset={rangePreset} customStart={customStart} customEnd={customEnd}
               onPreset={p => { setRangePreset(p); setCustomStart(""); setCustomEnd("") }}
               onCustom={(s, e) => { setCustomStart(s); setCustomEnd(e) }} />
+            <button
+              onClick={() => setCompare(c => !c)}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-all whitespace-nowrap"
+              style={compare ? { borderColor: brand, color: brand, background: `${brand}18` } : { borderColor: "#e2e8f0", color: "#64748b" }}
+              title="Compare with previous period"
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+              </svg>
+              Compare
+            </button>
             <button onClick={handleLogout} className="text-xs text-slate-400 hover:text-red-500 px-2 py-1.5">Sign out</button>
           </div>
         </div>
@@ -896,10 +964,10 @@ export default function ClientDashboard() {
                     <span className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Search Console</span>
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <MetricCard label="Organic Clicks" value={fmt(gsc?.clicks)} trend={gsc ? pct(gsc.clicks, gsc.prevClicks) : undefined} accent="blue" tooltip="Total clicks from Google Search results" />
-                    <MetricCard label="Impressions" value={fmt(gsc?.impressions)} trend={gsc ? pct(gsc.impressions, gsc.prevImpressions) : undefined} accent="blue" tooltip="Times your pages appeared in Google Search" />
-                    <MetricCard label="CTR" value={gsc ? `${gsc.ctr.toFixed(2)}%` : "—"} sub="Industry avg 2–5%" accent="blue" tooltip="Click-through rate: % of impressions that resulted in a click" />
-                    <MetricCard label="Avg. Position" value={gsc ? gsc.position.toFixed(1) : "—"} sub="Lower is better" accent="blue" tooltip="Average ranking position in Google Search results" />
+                    <MetricCard label="Organic Clicks" value={fmt(gsc?.clicks)} trend={gsc ? pct(gsc.clicks, gsc.prevClicks) : undefined} accent="blue" tooltip="Total clicks from Google Search results" prevValue={compare && gsc ? fmt(gsc.prevClicks) : undefined} />
+                    <MetricCard label="Impressions" value={fmt(gsc?.impressions)} trend={gsc ? pct(gsc.impressions, gsc.prevImpressions) : undefined} accent="blue" tooltip="Times your pages appeared in Google Search" prevValue={compare && gsc ? fmt(gsc.prevImpressions) : undefined} />
+                    <MetricCard label="CTR" value={gsc ? `${gsc.ctr.toFixed(2)}%` : "—"} sub="Industry avg 2–5%" accent="blue" tooltip="Click-through rate: % of impressions that resulted in a click" prevValue={compare && gsc ? `${gsc.prevCtr.toFixed(2)}%` : undefined} />
+                    <MetricCard label="Avg. Position" value={gsc ? gsc.position.toFixed(1) : "—"} sub="Lower is better" accent="blue" tooltip="Average ranking position in Google Search results" prevValue={compare && gsc ? gsc.prevPosition.toFixed(1) : undefined} />
                   </div>
                 </section>
 
@@ -934,18 +1002,15 @@ export default function ClientDashboard() {
                     <span className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Google Analytics 4</span>
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <MetricCard label="Sessions" value={fmt(ga4?.sessions)} trend={ga4 ? pct(ga4.sessions, ga4.prevSessions) : undefined} accent="green" tooltip="Total website sessions in this period" />
+                    <MetricCard label="Sessions" value={fmt(ga4?.sessions)} trend={ga4 ? pct(ga4.sessions, ga4.prevSessions) : undefined} accent="green" tooltip="Total website sessions in this period" prevValue={compare && ga4 ? fmt(ga4.prevSessions) : undefined} />
                     <MetricCard label="Users" value={fmt(ga4?.users)} accent="green" tooltip="Unique visitors to your website" />
                     <MetricCard label="Engagement Rate" value={ga4 ? `${ga4.engagementRate.toFixed(1)}%` : "—"} sub="Engaged / total" accent="green" tooltip="% of sessions that engaged with the page (scroll, click, 10+ seconds)" />
-                    <MetricCard label="Conversions" value={fmt(ga4?.conversions)} trend={ga4 ? pct(ga4.conversions, ga4.prevConversions) : undefined} accent="green" tooltip="Goal completions tracked in Google Analytics 4" />
+                    <MetricCard label="Conversions" value={fmt(ga4?.conversions)} trend={ga4 ? pct(ga4.conversions, ga4.prevConversions) : undefined} accent="green" tooltip="Goal completions tracked in Google Analytics 4" prevValue={compare && ga4 ? fmt(ga4.prevConversions) : undefined} />
                   </div>
                 </section>
 
-                {/* Traffic Value + AI mini card */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <MetricCard label="Estimated Traffic Value" value={`$${estimatedValue.toLocaleString()}`} sub="Organic clicks × $2.50 avg CPC" accent="amber" tooltip="Equivalent cost if this organic traffic were acquired through paid search (Google Ads)" />
-                  <MetricCard label="AI Platform Sessions" value={aiTraffic ? fmt(aiTraffic.total) : "0"} sub={totalChannelSessions > 0 && aiTraffic ? `${((aiTraffic.total / totalChannelSessions) * 100).toFixed(1)}% of total traffic` : "Emerging channel"} accent="purple" tooltip="Visits from AI tools: ChatGPT, Perplexity, Gemini, Claude and others" />
-                </div>
+                {/* AI Sessions card */}
+                <MetricCard label="AI Platform Sessions" value={aiTraffic ? fmt(aiTraffic.total) : "0"} sub={totalChannelSessions > 0 && aiTraffic ? `${((aiTraffic.total / totalChannelSessions) * 100).toFixed(1)}% of total traffic` : "Emerging channel"} accent="purple" tooltip="Visits from AI tools: ChatGPT, Perplexity, Gemini, Claude and others" />
 
                 {/* Sessions chart */}
                 {sessionsData.length > 0 && (
@@ -1456,7 +1521,7 @@ export default function ClientDashboard() {
                           <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">{opportunities.high.length}</span>
                         </div>
                         <div className="space-y-3">
-                          {opportunities.high.map((item, i) => <OpportunityCard key={i} item={item} priority="high" />)}
+                          {opportunities.high.map((item, i) => <OpportunityCard key={i} item={item} priority="high" status={oppStatus[oppKey(item.title)] ?? "todo"} onStatusChange={s => setOppStatusFor(oppKey(item.title), s)} />)}
                         </div>
                       </section>
                     )}
@@ -1469,7 +1534,7 @@ export default function ClientDashboard() {
                           <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">{opportunities.medium.length}</span>
                         </div>
                         <div className="space-y-3">
-                          {opportunities.medium.map((item, i) => <OpportunityCard key={i} item={item} priority="medium" />)}
+                          {opportunities.medium.map((item, i) => <OpportunityCard key={i} item={item} priority="medium" status={oppStatus[oppKey(item.title)] ?? "todo"} onStatusChange={s => setOppStatusFor(oppKey(item.title), s)} />)}
                         </div>
                       </section>
                     )}
@@ -1482,7 +1547,7 @@ export default function ClientDashboard() {
                           <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">{opportunities.low.length}</span>
                         </div>
                         <div className="space-y-3">
-                          {opportunities.low.map((item, i) => <OpportunityCard key={i} item={item} priority="low" />)}
+                          {opportunities.low.map((item, i) => <OpportunityCard key={i} item={item} priority="low" status={oppStatus[oppKey(item.title)] ?? "todo"} onStatusChange={s => setOppStatusFor(oppKey(item.title), s)} />)}
                         </div>
                       </section>
                     )}
