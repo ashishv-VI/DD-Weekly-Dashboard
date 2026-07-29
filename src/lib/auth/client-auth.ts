@@ -5,7 +5,10 @@ import { clients, loginAttemptLogs, notifications } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
 
 const MAX_ATTEMPTS = 4
-const JWT_SECRET = new TextEncoder().encode(process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || "fallback-secret-change-me")
+if (!process.env.AUTH_SECRET && !process.env.NEXTAUTH_SECRET) {
+  throw new Error("AUTH_SECRET or NEXTAUTH_SECRET environment variable must be set")
+}
+const JWT_SECRET = new TextEncoder().encode(process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET)
 const COOKIE_NAME = "client-session"
 
 export async function hashPin(pin: string): Promise<string> {

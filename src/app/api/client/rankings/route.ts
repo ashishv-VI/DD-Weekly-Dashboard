@@ -8,19 +8,25 @@ import { eq } from "drizzle-orm"
 
 function parseCSV(text: string): string[][] {
   const rows: string[][] = []
-  for (const line of text.split(/\r?\n/)) {
-    if (!line.trim()) continue
-    const row: string[] = []
-    let cur = "", inQ = false
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i]
-      if (ch === '"') { if (inQ && line[i + 1] === '"') { cur += '"'; i++ } else inQ = !inQ }
-      else if (ch === ',' && !inQ) { row.push(cur.trim()); cur = "" }
-      else cur += ch
+  let row: string[] = []
+  let cur = "", inQ = false
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+    if (ch === '"') {
+      if (inQ && text[i + 1] === '"') { cur += '"'; i++ }
+      else inQ = !inQ
+    } else if (ch === ',' && !inQ) {
+      row.push(cur.trim()); cur = ""
+    } else if (!inQ && (ch === '\n' || (ch === '\r' && text[i + 1] === '\n'))) {
+      if (ch === '\r') i++
+      row.push(cur.trim())
+      if (row.some(c => c.length > 0)) rows.push(row)
+      row = []; cur = ""
+    } else {
+      cur += ch
     }
-    row.push(cur.trim())
-    rows.push(row)
   }
+  if (cur.length > 0 || row.length > 0) { row.push(cur.trim()); if (row.some(c => c.length > 0)) rows.push(row) }
   return rows
 }
 
@@ -41,10 +47,12 @@ export async function GET() {
   let rankingConfig: RankingConfig | null = null
   try { if (client.notes) { const p = JSON.parse(client.notes); if (p?._v === 1) rankingConfig = p.rankingConfig ?? null } } catch {}
 
-  if (!rankingConfig) return NextResponse.json({ data: [], config: null })
+  const noCache = { headers: { "Cache-Control": "private, no-store" } }
+
+  if (!rankingConfig) return NextResponse.json({ data: [], config: null }, noCache)
 
   if (rankingConfig.type === "excel") {
-    return NextResponse.json({ data: rankingConfig.data ?? [], config: rankingConfig })
+    return NextResponse.json({ data: rankingConfig.data ?? [], config: rankingConfig }, noCache)
   }
 
   // Google Sheets — fetch live
@@ -55,7 +63,10 @@ export async function GET() {
     const tab = rankingConfig.gsheetTab || "Sheet1"
     const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tab)}`
     try {
-      const res = await fetch(csvUrl, { headers: { "User-Agent": "Mozilla/5.0" }, next: { revalidate: 3600 } })
+      const ctrl = new AbortController()
+      const timer = setTimeout(() => ctrl.abort(), 10000)
+      const res = await fetch(csvUrl, { signal: ctrl.signal, headers: { "User-Agent": "Mozilla/5.0" }, next: { revalidate: 3600 } })
+      clearTimeout(timer)
       if (!res.ok) throw new Error("Sheet not accessible")
       const text = await res.text()
       const rows = parseCSV(text)
@@ -65,19 +76,20 @@ export async function GET() {
       const ki = ci(m.keyword), pi = ci(m.prevRank), ri = ci(m.currentRank)
       const vi = ci(m.volume), ui = ci(m.url), li = ci(m.location)
       const num = (v: string) => { const n = Number(v); return isNaN(n) ? null : n }
+      if (ki < 0) return NextResponse.json({ data: [], config: rankingConfig, error: "Keyword column not found — check column mapping" }, { headers: { "Cache-Control": "private, no-store" } })
       const data: RankingRow[] = rows.slice(1).map(row => ({
-        keyword: String(row[ki] ?? "").trim(),
+        keyword: ki >= 0 ? String(row[ki] ?? "").trim() : "",
         prevRank: pi >= 0 ? num(String(row[pi] ?? "")) : null,
         currentRank: ri >= 0 ? num(String(row[ri] ?? "")) : null,
         volume: vi >= 0 ? num(String(row[vi] ?? "")) : null,
         url: ui >= 0 ? String(row[ui] ?? "").trim() : "",
         location: li >= 0 ? String(row[li] ?? "").trim() : "",
       })).filter(r => r.keyword)
-      return NextResponse.json({ data, config: rankingConfig })
+      return NextResponse.json({ data, config: rankingConfig }, noCache)
     } catch (e) {
-      return NextResponse.json({ data: [], config: rankingConfig, error: "Could not fetch sheet" })
+      return NextResponse.json({ data: [], config: rankingConfig, error: "Could not fetch sheet" }, noCache)
     }
   }
 
-  return NextResponse.json({ data: [], config: rankingConfig })
+  return NextResponse.json({ data: [], config: rankingConfig }, noCache)
 }

@@ -32,6 +32,7 @@ export interface DashboardMetrics {
   prevClicks: number
   prevImpressions: number
   prevSessions: number
+  prevUsers: number
   prevConversions: number
 }
 
@@ -98,6 +99,7 @@ export async function getGA4Metrics(
     avgSessionDuration: Number(curr[7]?.value ?? 0),
     screenPageViewsPerSession: Number(curr[8]?.value ?? 0),
     prevSessions: Number(prev[0]?.value ?? 0),
+    prevUsers: Number(prev[1]?.value ?? 0),
     prevConversions: Number(prev[5]?.value ?? 0),
   }
 

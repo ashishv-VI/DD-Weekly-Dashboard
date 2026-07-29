@@ -7,7 +7,7 @@ import { DATE_PRESETS } from "@/lib/dateRange"
 
 interface ClientInfo { id: string; name: string; domain: string; username: string; ga4PropertyId: string | null; gscSiteUrl: string | null; logoUrl?: string; themeColor?: string; textOnTheme?: string }
 interface GSCTotals { clicks: number; impressions: number; ctr: number; position: number; prevClicks: number; prevImpressions: number; prevCtr: number; prevPosition: number }
-interface GA4Totals { sessions: number; users: number; newUsers: number; returningUsers: number; engagedSessions: number; engagementRate: number; conversions: number; revenue: number; avgSessionDuration: number; screenPageViewsPerSession: number; prevSessions: number; prevConversions: number }
+interface GA4Totals { sessions: number; users: number; newUsers: number; returningUsers: number; engagedSessions: number; engagementRate: number; conversions: number; revenue: number; avgSessionDuration: number; screenPageViewsPerSession: number; prevSessions: number; prevUsers: number; prevConversions: number }
 interface DailyRow { date: string; clicks?: number; sessions?: number }
 interface KeywordRow { keyword: string; clicks: number; impressions: number; ctr: number; position: number }
 interface KeywordWithPage { keyword: string; page: string; clicks: number; impressions: number; ctr: number; position: number }
@@ -238,7 +238,7 @@ function calcSubScores(
     let gS = 50
     if (gsc && gsc.prevClicks > 0) {
       const g = ((gsc.clicks - gsc.prevClicks) / gsc.prevClicks) * 100
-      gS = g > 30 ? 100 : g > 10 ? 80 : g > 0 ? 65 : g > -10 ? 45 : 20
+      gS = g > 30 ? 100 : g > 10 ? 80 : g > 0 ? 65 : g > -10 ? 45 : g > -30 ? 25 : 10
     }
     engScore = Math.round(eS * 0.65 + gS * 0.35)
   }
@@ -347,6 +347,7 @@ function trafficInsight(channels: ChannelRow[], aiTotal: number): string {
 function aiInsight(data: AITrafficData | null | undefined, totalSessions: number): string {
   if (!data || data.total === 0) return "No AI platform traffic detected yet. Add FAQ sections, entity-rich content, and clear authorship signals to get cited by ChatGPT, Perplexity, and Gemini."
   const top = data.bySource[0]
+  if (!top) return `${fmt(data.total)} sessions from AI platforms detected. Platform breakdown is unavailable.`
   const aiPct = totalSessions > 0 ? ((data.total / totalSessions) * 100).toFixed(1) : "0"
   const { name } = aiLabel(top?.source ?? "")
   return `${fmt(data.total)} sessions (${aiPct}% of total traffic) from AI platforms — ${name} is the top referrer. AI-referred users tend to have high purchase intent. Optimise for AI visibility with clear, factual, entity-structured content and comprehensive FAQ coverage.`
@@ -1225,6 +1226,7 @@ export default function ClientDashboard() {
   useEffect(() => {
     fetch("/api/client/me").then(r => { if (!r.ok) { router.push("/client/login"); return null }; return r.json() })
       .then(d => { if (d) setClient(d) })
+      .catch(() => router.push("/client/login"))
   }, [router])
 
   useEffect(() => {
@@ -1251,11 +1253,13 @@ export default function ClientDashboard() {
     setSummary(null)
     setKwPage(0); setKwpPage(0); setPgPage(0)
     const params = customStart && customEnd ? `startDate=${customStart}&endDate=${customEnd}` : `range=${rangePreset}`
-    fetch(`/api/client/data?${params}`)
+    const ctrl = new AbortController()
+    fetch(`/api/client/data?${params}`, { signal: ctrl.signal })
       .then(r => { if (!r.ok) throw new Error("err"); return r.json() })
       .then(d => setData(d.error ? {} : d))
-      .catch(() => setData({}))
+      .catch(e => { if (e?.name !== "AbortError") setData({}) })
       .finally(() => setLoading(false))
+    return () => ctrl.abort()
   }, [client, rangePreset, customStart, customEnd])
 
   // Fetch fixed 30-day data + rankings once for the health score — so it never changes with date range
@@ -1263,14 +1267,14 @@ export default function ClientDashboard() {
     if (!client || health30d) return
     Promise.all([
       fetch("/api/client/data?range=30d").then(r => r.json()),
-      fetch("/api/client/rankings").then(r => r.json()).catch(() => ({ data: [] })),
+      fetch("/api/client/rankings").then(r => r.json()).catch(() => ({ data: [], config: null })),
     ]).then(([d, rankData]) => {
-      if (d.error) return
-      const g = d.gsc?.totals as GSCTotals | undefined
-      const g4 = d.ga4?.totals as Partial<GA4Totals> | undefined
-      const ai = d.aiTraffic as AITrafficData | null | undefined
+      const g = d?.gsc?.totals as GSCTotals | undefined
+      const g4 = d?.ga4?.totals as Partial<GA4Totals> | undefined
+      const ai = d?.aiTraffic as AITrafficData | null | undefined
       const rnk = (rankData.data ?? []) as RankingRow[]
       if (rnk.length > 0) setRankings(rnk)
+      if (rankData.config) setRankConfig(rankData.config)
       const h = calcHealthScore(g, g4, ai, rnk)
       setHealth30d({ score: h.score, label: h.label, color: h.color })
     }).catch(() => {})
@@ -1714,7 +1718,7 @@ export default function ClientDashboard() {
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <MetricCard label="Website Visits" value={fmt(ga4?.sessions)} trend={ga4 ? pct(ga4.sessions, ga4.prevSessions) : undefined} accent="green" tooltip="Total number of visits to your website in this period" prevValue={compare && ga4 ? fmt(ga4.prevSessions) : undefined} benchInfo={ga4 ? getKpiBench("growth", ga4.sessions, ga4.prevSessions) : undefined} />
-                    <MetricCard label="Unique Visitors" value={fmt(ga4?.users)} accent="green" tooltip="Number of individual people who visited your website" benchInfo={ga4 ? getKpiBench("growth", ga4.users, ga4.prevSessions) : undefined} />
+                    <MetricCard label="Unique Visitors" value={fmt(ga4?.users)} accent="green" tooltip="Number of individual people who visited your website" benchInfo={ga4?.prevUsers ? getKpiBench("growth", ga4.users, ga4.prevUsers) : undefined} />
                     <MetricCard label="Engagement Rate" value={ga4 ? `${ga4.engagementRate.toFixed(1)}%` : "—"} accent="green" tooltip="% of visitors who actively engaged — scrolled, clicked or spent 10+ seconds on a page" benchInfo={ga4 ? getKpiBench("engagement", ga4.engagementRate) : undefined} />
                     <MetricCard label="Goal Completions" value={fmt(ga4?.conversions)} trend={ga4 ? pct(ga4.conversions, ga4.prevConversions) : undefined} accent="green" tooltip="Actions completed on your website — form fills, calls, purchases or other tracked goals" prevValue={compare && ga4 ? fmt(ga4.prevConversions) : undefined} benchInfo={ga4 ? getKpiBench("growth", ga4.conversions, ga4.prevConversions) : undefined} />
                   </div>
@@ -2063,7 +2067,7 @@ export default function ClientDashboard() {
                                     <td className="px-4 py-3.5 text-right bg-blue-50/40">
                                       <div className="text-xs font-semibold text-blue-700 tabular-nums">{fmt(ch.prevSessions)}</div>
                                       <div className={`text-xs font-bold tabular-nums ${ch.sessions >= ch.prevSessions ? "text-emerald-500" : "text-red-500"}`}>
-                                        {ch.sessions >= ch.prevSessions ? "↑" : "↓"}{ch.prevSessions > 0 ? Math.abs(((ch.sessions - ch.prevSessions) / ch.prevSessions) * 100).toFixed(0) : "—"}%
+                                        {ch.sessions >= ch.prevSessions ? "↑" : "↓"}{ch.prevSessions > 0 ? `${Math.abs(((ch.sessions - ch.prevSessions) / ch.prevSessions) * 100).toFixed(0)}%` : "—"}
                                       </div>
                                     </td>
                                   )}
@@ -2083,7 +2087,7 @@ export default function ClientDashboard() {
                                       <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden" style={{ width: 52 }}>
                                         <div className="h-full rounded-full" style={{ width: `${ch.engagementRate}%`, background: ch.engagementRate > 50 ? "#10B981" : ch.engagementRate > 30 ? "#F59E0B" : "#EF4444" }} />
                                       </div>
-                                      <span className={`text-xs font-semibold tabular-nums ${ch.engagementRate > 50 ? "text-emerald-600" : ch.engagementRate > 30 ? "text-amber-600" : "text-red-500"}`}>{ch.engagementRate.toFixed(0)}%</span>
+                                      <span className={`text-xs font-semibold tabular-nums ${ch.engagementRate > 50 ? "text-emerald-600" : ch.engagementRate > 30 ? "text-amber-600" : "text-red-500"}`}>{Math.min(ch.engagementRate, 100).toFixed(0)}%</span>
                                     </div>
                                   </td>
                                 </tr>
@@ -2129,7 +2133,7 @@ export default function ClientDashboard() {
                                     <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden" style={{ width: 80 }}>
                                       <div className="h-full rounded-full" style={{ width: `${eng}%`, background: eng > 50 ? "#10B981" : eng > 30 ? "#F59E0B" : "#EF4444" }} />
                                     </div>
-                                    <span className={`text-xs font-semibold tabular-nums ${eng > 50 ? "text-emerald-600" : eng > 30 ? "text-amber-600" : "text-red-500"}`}>{eng.toFixed(0)}%</span>
+                                    <span className={`text-xs font-semibold tabular-nums ${eng > 50 ? "text-emerald-600" : eng > 30 ? "text-amber-600" : "text-red-500"}`}>{Math.min(eng, 100).toFixed(0)}%</span>
                                   </div>
                                 </td>
                                 <td className="px-4 py-3.5 text-right text-xs text-slate-600 tabular-nums">{fmt(engSess)}</td>
@@ -2501,8 +2505,7 @@ export default function ClientDashboard() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-50">
-                        {pagedPages.map((p, i) => {
-                          const maxClicks = Math.max(...pages.map(x => x.clicks), 1)
+                        {(() => { const maxClicks = pages.reduce((m, x) => Math.max(m, x.clicks), 0) || 1; return pagedPages.map((p, i) => {
                           const barW = (p.clicks / maxClicks) * 100
                           return (
                             <tr key={p.url} className="hover:bg-blue-50 transition-colors">
@@ -2526,7 +2529,7 @@ export default function ClientDashboard() {
                               <td className="px-4 py-2.5 text-right text-sm tabular-nums text-slate-600">{p.ga4 ? fmt(p.ga4.conversions) : <span className="text-slate-300">—</span>}</td>
                             </tr>
                           )
-                        })}
+                        })})()}
                       </tbody>
                     </table>
                     <div className="px-5 pb-4">
@@ -2719,7 +2722,7 @@ export default function ClientDashboard() {
                 <section>
                   <div className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">User Overview</div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <MetricCard label="Total Users" value={fmt(ga4?.users)} accent="green" tooltip="All unique users in this period" benchInfo={ga4 ? getKpiBench("growth", ga4.users, ga4.prevSessions) : undefined} />
+                    <MetricCard label="Total Users" value={fmt(ga4?.users)} accent="green" tooltip="All unique users in this period" benchInfo={ga4?.prevUsers ? getKpiBench("growth", ga4.users, ga4.prevUsers) : undefined} />
                     <MetricCard label="New Users" value={fmt(ga4?.newUsers)} accent="green" tooltip="First-time visitors to the website" />
                     <MetricCard label="Returning Users" value={fmt(ga4?.returningUsers)} accent="green" tooltip="Users who have visited before" />
                     <MetricCard label="Avg. Session Duration" value={fmtDur(ga4?.avgSessionDuration ?? 0)} accent="green" tooltip="Average time users spend per session" benchInfo={ga4 ? getKpiBench("duration", ga4.avgSessionDuration) : undefined} />
@@ -3162,6 +3165,12 @@ export default function ClientDashboard() {
                     <div className="flex items-center gap-3 px-5 py-6">
                       <div className="w-5 h-5 border-2 border-slate-200 border-t-blue-600 rounded-full animate-spin shrink-0" />
                       <div className="text-sm text-slate-500">Checking your pages — this takes about 20–30 seconds…</div>
+                    </div>
+                  )}
+                  {psError && !psLoading && multiPs.length === 0 && (
+                    <div className="px-5 py-6 flex flex-col gap-3 items-start">
+                      <p className="text-sm text-slate-500">Could not load page speed data. This can happen when Google's servers are busy.</p>
+                      <button onClick={() => loadPagespeed(true)} className="text-xs font-semibold text-blue-600 hover:underline">Try Again</button>
                     </div>
                   )}
 

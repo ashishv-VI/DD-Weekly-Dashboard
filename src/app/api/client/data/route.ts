@@ -36,7 +36,10 @@ export async function GET(req: Request) {
   const qStart = searchParams.get("startDate")
   const qEnd = searchParams.get("endDate")
 
-  const [client] = await db.select().from(clients).where(eq(clients.id, payload.sub)).limit(1)
+  const [client] = await db.select({
+    id: clients.id, name: clients.name,
+    ga4PropertyId: clients.ga4PropertyId, gscSiteUrl: clients.gscSiteUrl,
+  }).from(clients).where(eq(clients.id, payload.sub)).limit(1)
   if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 })
 
   if (!client.ga4PropertyId && !client.gscSiteUrl) {
@@ -96,10 +99,11 @@ export async function GET(req: Request) {
       : Promise.resolve([]), [] as Awaited<ReturnType<typeof getPagePerformance>>),
   ])
 
+  const noCache = { headers: { "Cache-Control": "private, no-store" } }
+
   if (!gsc && !ga4) {
-    await notifyAdmin(client.name)
-    return NextResponse.json({ gsc: null, ga4: null, keywords: [], keywordsWithPages: [], pages: [], devices: [], countries: [], channels: [], aiTraffic: null, userBreakdown: [], pagePerformance: [] })
+    return NextResponse.json({ gsc: null, ga4: null, keywords: [], keywordsWithPages: [], pages: [], devices: [], countries: [], channels: [], aiTraffic: null, userBreakdown: [], pagePerformance: [] }, noCache)
   }
 
-  return NextResponse.json({ gsc, ga4, keywords, keywordsWithPages, pages, devices, countries, channels, aiTraffic, userBreakdown, pagePerformance })
+  return NextResponse.json({ gsc, ga4, keywords, keywordsWithPages, pages, devices, countries, channels, aiTraffic, userBreakdown, pagePerformance }, noCache)
 }
