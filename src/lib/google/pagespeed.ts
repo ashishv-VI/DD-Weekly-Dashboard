@@ -33,10 +33,15 @@ export async function getPageSpeed(url: string): Promise<PageSpeedResult> {
   const cats = "&category=performance"
 
   const [mRes, dRes] = await Promise.all([
-    fetch(`${base}?url=${encoded}&strategy=mobile${cats}${key}`, { next: { revalidate: 3600 } }),
-    fetch(`${base}?url=${encoded}&strategy=desktop${cats}${key}`, { next: { revalidate: 3600 } }),
+    fetch(`${base}?url=${encoded}&strategy=mobile${cats}${key}`),
+    fetch(`${base}?url=${encoded}&strategy=desktop${cats}${key}`),
   ])
 
   const [mobile, desktop] = await Promise.all([mRes.json(), dRes.json()])
+
+  if (mobile.error || !mobile.lighthouseResult) {
+    throw new Error(mobile.error?.message ?? "PageSpeed API returned no lighthouse data")
+  }
+
   return { mobile: parseResult(mobile), desktop: parseResult(desktop) }
 }

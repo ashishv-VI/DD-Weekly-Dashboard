@@ -34,20 +34,306 @@ function getContrastText(hex: string): string {
   return (0.2126 * r + 0.7152 * g + 0.0722 * b) > 0.35 ? "#1e293b" : "#ffffff"
 }
 
-function parseNotes(raw: string | null): { industry: string; country: string; assignedTo: string; notes: string; logoUrl: string; themeColor: string; textOnTheme: string } {
-  if (!raw) return { industry: "", country: "", assignedTo: "", notes: "", logoUrl: "", themeColor: "", textOnTheme: "" }
+interface RankingMapping { keyword: string; prevRank: string; currentRank: string; volume: string; url: string; location: string }
+interface RankingRow { keyword: string; prevRank: number | null; currentRank: number | null; volume: number | null; url: string; location: string }
+interface RankingConfig { type: "excel" | "gsheet"; gsheetUrl: string; gsheetTab: string; mapping: RankingMapping; data: RankingRow[]; rowCount: number; updatedAt: string }
+
+function parseNotes(raw: string | null): { industry: string; country: string; assignedTo: string; notes: string; logoUrl: string; themeColor: string; textOnTheme: string; rankingConfig: RankingConfig | null } {
+  if (!raw) return { industry: "", country: "", assignedTo: "", notes: "", logoUrl: "", themeColor: "", textOnTheme: "", rankingConfig: null }
   try {
     const p = JSON.parse(raw)
-    if (p && p._v === 1) return { industry: p.industry || "", country: p.country || "", assignedTo: p.assignedTo || "", notes: p.notes || "", logoUrl: p.logoUrl || "", themeColor: p.themeColor || "", textOnTheme: p.textOnTheme || "" }
+    if (p && p._v === 1) return { industry: p.industry || "", country: p.country || "", assignedTo: p.assignedTo || "", notes: p.notes || "", logoUrl: p.logoUrl || "", themeColor: p.themeColor || "", textOnTheme: p.textOnTheme || "", rankingConfig: p.rankingConfig ?? null }
   } catch {}
-  return { industry: "", country: "", assignedTo: "", notes: raw, logoUrl: "", themeColor: "", textOnTheme: "" }
+  return { industry: "", country: "", assignedTo: "", notes: raw, logoUrl: "", themeColor: "", textOnTheme: "", rankingConfig: null }
 }
 
-function serializeNotes(industry: string, country: string, assignedTo: string, notes: string, logoUrl: string, themeColor: string, textOnTheme: string): string {
-  return JSON.stringify({ _v: 1, industry, country, assignedTo, notes, logoUrl, themeColor, textOnTheme })
+function serializeNotes(industry: string, country: string, assignedTo: string, notes: string, logoUrl: string, themeColor: string, textOnTheme: string, rankingConfig: RankingConfig | null): string {
+  return JSON.stringify({ _v: 1, industry, country, assignedTo, notes, logoUrl, themeColor, textOnTheme, rankingConfig })
 }
 
 const INDUSTRIES = ["Technology", "E-commerce", "Healthcare", "Finance", "Real Estate", "Education", "Travel", "Manufacturing", "Legal", "Retail", "Other"]
+
+function RankingConfigCard({ config, onSave }: { config: RankingConfig | null; onSave: (cfg: RankingConfig) => void }) {
+  const [open, setOpen] = useState(false)
+  const [srcType, setSrcType] = useState<"excel" | "gsheet">("excel")
+  const [headers, setHeaders] = useState<string[]>([])
+  const [rawRows, setRawRows] = useState<string[][]>([])
+  const [sheetNames, setSheetNames] = useState<string[]>([])
+  const [activeSheet, setActiveSheet] = useState("")
+  const [gsheetUrl, setGsheetUrl] = useState("")
+  const [gsheetTab, setGsheetTab] = useState("Sheet1")
+  const [fetching, setFetching] = useState(false)
+  const [mapping, setMapping] = useState<RankingMapping>({ keyword: "", prevRank: "", currentRank: "", volume: "", url: "", location: "" })
+  const [err, setErr] = useState("")
+  const fileRef = useRef<HTMLInputElement>(null)
+  const wbRef = useRef<any>(null)
+
+  // Excel stores date-formatted header cells as serial numbers (e.g. 46113 = 01 Apr 2026)
+  const isExcelDate = (h: string) => { const n = Number(h); return !isNaN(n) && n > 40000 && n < 60000 }
+  const fmtColLabel = (h: string) => {
+    if (!isExcelDate(h)) return h
+    return new Date(Math.round((Number(h) - 25569) * 86400000)).toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" })
+  }
+
+  function autoMap(cols: string[]) {
+    const find = (patterns: string[]) => cols.find(c => patterns.some(p => c.toLowerCase().includes(p))) ?? ""
+    // Auto-detect date serial columns (e.g. "46113", "46143") — sort ascending so older date = prev
+    const dateCols = cols.filter(isExcelDate).sort((a, b) => Number(a) - Number(b))
+    setMapping({
+      keyword: find(["keyword", "search term", "query", "key word"]),
+      prevRank: dateCols[0] || find(["prev", "last", "previous", "old", "before", "feb", "jan", "mar"]),
+      currentRank: dateCols[1] || find(["curr", "current", "now", "this", "latest", "new", "apr", "may", "jun"]),
+      volume: find(["volume", "vol", "search vol", "searches", "monthly"]),
+      url: find(["url", "page", "landing", "link", "slug"]),
+      location: find(["location", "country", "region", "city", "market", "geo"]),
+    })
+  }
+
+  async function loadSheet(wb: any, sheetName: string) {
+    const XLSX = await import("xlsx")
+    const ws = wb.Sheets[sheetName]
+    const data = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: "" })
+    const rows = (data as string[][]).filter(r => r.some(c => String(c).trim()))
+    setRawRows(rows)
+    const hdrs = (rows[0] ?? []).map(String)
+    setHeaders(hdrs)
+    autoMap(hdrs)
+  }
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]; if (!file) return
+    setErr("")
+    try {
+      const XLSX = await import("xlsx")
+      const buf = await file.arrayBuffer()
+      const wb = XLSX.read(buf, { type: "array" })
+      wbRef.current = wb
+      setSheetNames(wb.SheetNames)
+      const sn = wb.SheetNames[0]
+      setActiveSheet(sn)
+      await loadSheet(wb, sn)
+    } catch { setErr("Could not read file. Upload a valid .xlsx, .xls, or .csv file.") }
+  }
+
+  async function handleSheetSwitch(sn: string) {
+    setActiveSheet(sn)
+    if (wbRef.current) await loadSheet(wbRef.current, sn)
+  }
+
+  async function handleGsheetFetch() {
+    if (!gsheetUrl.trim()) return
+    setFetching(true); setErr("")
+    try {
+      const res = await fetch(`/api/admin/fetch-gsheet?url=${encodeURIComponent(gsheetUrl)}&tab=${encodeURIComponent(gsheetTab)}`)
+      const d = await res.json()
+      if (!res.ok || d.error) throw new Error(d.error ?? "Failed to fetch")
+      setHeaders(d.headers)
+      setRawRows([d.headers, ...d.preview])
+      autoMap(d.headers)
+    } catch (e) { setErr(e instanceof Error ? e.message : "Could not fetch sheet") }
+    finally { setFetching(false) }
+  }
+
+  function handleSaveConfig() {
+    if (!mapping.keyword || !mapping.prevRank || !mapping.currentRank) {
+      setErr("Keyword, Previous Rank, and Current Rank are required."); return
+    }
+    const ci = (col: string) => headers.indexOf(col)
+    const ki = ci(mapping.keyword), pi = ci(mapping.prevRank), ri = ci(mapping.currentRank)
+    const vi = ci(mapping.volume), ui = ci(mapping.url), li = ci(mapping.location)
+    const num = (v: string) => { const n = Number(v); return isNaN(n) ? null : n }
+    let data: RankingRow[] = rawRows.slice(1)
+      .map(row => ({
+        keyword: String(row[ki] ?? "").trim(),
+        prevRank: pi >= 0 ? num(String(row[pi] ?? "")) : null,
+        currentRank: ri >= 0 ? num(String(row[ri] ?? "")) : null,
+        volume: vi >= 0 ? num(String(row[vi] ?? "")) : null,
+        url: ui >= 0 ? String(row[ui] ?? "").trim() : "",
+        location: li >= 0 ? String(row[li] ?? "").trim() : "",
+      }))
+      .filter(r => r.keyword)
+    if (srcType === "excel" && data.length > 2000) { data = data.slice(0, 2000); setErr("Truncated to 2000 rows max.") }
+    onSave({ type: srcType, gsheetUrl: srcType === "gsheet" ? gsheetUrl : "", gsheetTab: srcType === "gsheet" ? gsheetTab : "", mapping, data: srcType === "excel" ? data : [], rowCount: data.length, updatedAt: new Date().toISOString().slice(0, 10) })
+    setOpen(false); setHeaders([]); setRawRows([])
+  }
+
+  const mappingFields: { key: keyof RankingMapping; label: string; required: boolean }[] = [
+    { key: "keyword", label: "Keyword Column", required: true },
+    { key: "prevRank", label: "Previous Month Ranking", required: true },
+    { key: "currentRank", label: "Current Month Ranking", required: true },
+    { key: "volume", label: "Search Volume", required: false },
+    { key: "url", label: "Landing URL", required: false },
+    { key: "location", label: "Location / Market", required: false },
+  ]
+
+  const preview = rawRows.slice(1, 6).map(row => ({
+    keyword: headers.indexOf(mapping.keyword) >= 0 ? String(row[headers.indexOf(mapping.keyword)] ?? "—") : "—",
+    prev: headers.indexOf(mapping.prevRank) >= 0 ? String(row[headers.indexOf(mapping.prevRank)] ?? "—") : "—",
+    curr: headers.indexOf(mapping.currentRank) >= 0 ? String(row[headers.indexOf(mapping.currentRank)] ?? "—") : "—",
+    vol: mapping.volume && headers.indexOf(mapping.volume) >= 0 ? String(row[headers.indexOf(mapping.volume)] ?? "—") : null,
+  }))
+  const canSave = headers.length > 0 && mapping.keyword && mapping.prevRank && mapping.currentRank
+
+  return (
+    <div className="flex items-start gap-4 p-4 rounded-xl border border-gray-100 bg-gray-50">
+      <div className="w-10 h-10 rounded-xl bg-white border border-gray-100 flex items-center justify-center shrink-0 shadow-sm">
+        <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+        </svg>
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1">
+          <p className="text-sm font-semibold text-gray-900">Keyword Rankings</p>
+          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${config ? "bg-emerald-100 text-emerald-700" : "bg-gray-200 text-gray-500"}`}>
+            {config ? "Connected" : "Not Connected"}
+          </span>
+        </div>
+        <p className="text-xs text-gray-500 mb-3">Import monthly keyword rankings from Excel/CSV or a public Google Sheet. Map columns once — dashboard updates on each import.</p>
+
+        {config && !open && (
+          <div className="text-xs text-gray-600 bg-white rounded-lg border border-gray-200 p-3 mb-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-semibold">{config.type === "excel" ? "Excel / CSV" : "Google Sheets"}</span>
+              <span className="text-gray-300">•</span>
+              <span>{config.rowCount} keywords</span>
+              <span className="text-gray-300">•</span>
+              <span>Updated {config.updatedAt}</span>
+            </div>
+            {config.type === "gsheet" && <p className="text-gray-400 mt-1 truncate">Sheet: {config.gsheetUrl}</p>}
+            <p className="text-gray-400 mt-0.5">Columns: {config.mapping.keyword} → Prev: {fmtColLabel(config.mapping.prevRank)} → Current: {fmtColLabel(config.mapping.currentRank)}</p>
+          </div>
+        )}
+
+        {!open ? (
+          <button type="button" onClick={() => setOpen(true)}
+            className="text-xs bg-white border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors font-medium">
+            {config ? "Reconfigure" : "Configure Rankings"}
+          </button>
+        ) : (
+          <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
+            {/* Source type */}
+            <div>
+              <p className="text-xs font-semibold text-gray-700 mb-2">Data Source</p>
+              <div className="flex gap-2">
+                {(["excel", "gsheet"] as const).map(t => (
+                  <button key={t} type="button" onClick={() => { setSrcType(t); setHeaders([]); setRawRows([]) }}
+                    className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border font-medium transition-all ${srcType === t ? "bg-blue-600 text-white border-blue-600" : "text-gray-600 border-gray-200 hover:bg-gray-50"}`}>
+                    {t === "excel" ? "📄 Excel / CSV" : "🔗 Google Sheets"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Excel upload */}
+            {srcType === "excel" && (
+              <div className="space-y-2">
+                <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFile} />
+                <button type="button" onClick={() => fileRef.current?.click()}
+                  className="flex items-center gap-2 w-full border-2 border-dashed border-gray-200 rounded-lg p-4 text-sm text-gray-500 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600 transition-all justify-center">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                  Click to upload .xlsx / .xls / .csv
+                </button>
+                {sheetNames.length > 1 && (
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 block mb-1">Worksheet / Tab</label>
+                    <select value={activeSheet} onChange={e => handleSheetSwitch(e.target.value)}
+                      className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-500">
+                      {sheetNames.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                )}
+                {rawRows.length > 0 && <p className="text-xs text-emerald-600">✓ {rawRows.length - 1} rows detected · {headers.length} columns</p>}
+              </div>
+            )}
+
+            {/* Google Sheets */}
+            {srcType === "gsheet" && (
+              <div className="space-y-2">
+                <div>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">Google Sheets URL (must be public — "Anyone with link can view")</label>
+                  <input type="url" value={gsheetUrl} onChange={e => setGsheetUrl(e.target.value)}
+                    placeholder="https://docs.google.com/spreadsheets/d/..."
+                    className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                </div>
+                <div className="flex gap-2 items-end">
+                  <div className="flex-1">
+                    <label className="text-xs font-medium text-gray-600 block mb-1">Tab / Sheet Name</label>
+                    <input value={gsheetTab} onChange={e => setGsheetTab(e.target.value)} placeholder="Sheet1"
+                      className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                  </div>
+                  <button type="button" onClick={handleGsheetFetch} disabled={!gsheetUrl.trim() || fetching}
+                    className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors whitespace-nowrap font-medium">
+                    {fetching ? "Fetching…" : "Fetch Columns →"}
+                  </button>
+                </div>
+                {rawRows.length > 0 && <p className="text-xs text-emerald-600">✓ {headers.length} columns detected from sheet</p>}
+              </div>
+            )}
+
+            {/* Column Mapping */}
+            {headers.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-gray-700 mb-2">Map Columns</p>
+                <div className="space-y-2">
+                  {mappingFields.map(({ key, label, required }) => (
+                    <div key={key} className="flex items-center gap-3">
+                      <label className="text-xs text-gray-600 shrink-0 w-44">{label}{required && <span className="text-red-500 ml-0.5">*</span>}</label>
+                      <select value={mapping[key]} onChange={e => setMapping(m => ({ ...m, [key]: e.target.value }))}
+                        className="flex-1 border border-gray-200 rounded-lg px-2 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-500">
+                        <option value="">— {required ? "select column" : "skip (optional)"} —</option>
+                        {headers.map(h => <option key={h} value={h}>{fmtColLabel(h)}</option>)}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Preview table */}
+            {preview.length > 0 && canSave && (
+              <div>
+                <p className="text-xs font-semibold text-gray-700 mb-2">Preview (first 5 rows)</p>
+                <div className="overflow-x-auto rounded-lg border border-gray-100">
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="text-left px-3 py-2 text-gray-500 font-medium">Keyword</th>
+                        <th className="text-center px-3 py-2 text-gray-500 font-medium">Prev</th>
+                        <th className="text-center px-3 py-2 text-gray-500 font-medium">Current</th>
+                        {mapping.volume && <th className="text-center px-3 py-2 text-gray-500 font-medium">Volume</th>}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {preview.map((row, i) => (
+                        <tr key={i} className="border-t border-gray-50">
+                          <td className="px-3 py-2 text-gray-800 font-medium max-w-[180px] truncate">{row.keyword}</td>
+                          <td className="px-3 py-2 text-center text-gray-600">{row.prev}</td>
+                          <td className="px-3 py-2 text-center text-gray-600">{row.curr}</td>
+                          {mapping.volume && <td className="px-3 py-2 text-center text-gray-400">{row.vol}</td>}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {err && <p className="text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-lg border border-amber-200">{err}</p>}
+
+            <div className="flex gap-2 pt-1">
+              <button type="button" onClick={() => { setOpen(false); setHeaders([]); setRawRows([]) }}
+                className="text-xs text-gray-500 px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
+              <button type="button" onClick={handleSaveConfig} disabled={!canSave}
+                className="text-xs bg-blue-600 text-white px-4 py-1.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors font-medium">
+                Save Configuration
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 
 export default function ClientDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -64,6 +350,7 @@ export default function ClientDetailPage() {
     name: "", domain: "", username: "", pin: "",
     ga4PropertyId: "", gscSiteUrl: "", status: "",
     industry: "", country: "", assignedTo: "", notes: "", logoUrl: "", themeColor: "", textOnTheme: "",
+    rankingConfig: null as RankingConfig | null,
   })
 
   useEffect(() => {
@@ -74,6 +361,7 @@ export default function ClientDetailPage() {
         name: d.name || "", domain: d.domain || "", username: d.username || "", pin: "",
         ga4PropertyId: d.ga4PropertyId || "", gscSiteUrl: d.gscSiteUrl || "", status: d.status || "active",
         industry: meta.industry, country: meta.country, assignedTo: meta.assignedTo, notes: meta.notes, logoUrl: meta.logoUrl, themeColor: meta.themeColor, textOnTheme: meta.textOnTheme,
+        rankingConfig: meta.rankingConfig,
       })
       setLoading(false)
     })
@@ -86,7 +374,7 @@ export default function ClientDetailPage() {
       const body = {
         name: form.name, domain: form.domain, username: form.username, pin: form.pin,
         ga4PropertyId: form.ga4PropertyId, gscSiteUrl: form.gscSiteUrl, status: form.status,
-        notes: serializeNotes(form.industry, form.country, form.assignedTo, form.notes, form.logoUrl, form.themeColor, form.textOnTheme),
+        notes: serializeNotes(form.industry, form.country, form.assignedTo, form.notes, form.logoUrl, form.themeColor, form.textOnTheme, form.rankingConfig),
       }
       const res = await fetch(`/api/admin/clients/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
       if (!res.ok) throw new Error((await res.json()).error)
@@ -390,6 +678,8 @@ export default function ClientDetailPage() {
                   placeholder="e.g. https://example.com/" value={form.gscSiteUrl} onChange={e => setForm({ ...form, gscSiteUrl: e.target.value })} />
               </div>
             </div>
+
+            <RankingConfigCard config={form.rankingConfig} onSave={(cfg) => setForm(f => ({ ...f, rankingConfig: cfg }))} />
 
             <div className="flex items-center justify-end pt-2">
               <button type="submit" disabled={saving}

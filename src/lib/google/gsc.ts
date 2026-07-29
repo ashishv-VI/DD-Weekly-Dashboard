@@ -114,6 +114,42 @@ export async function getTopKeywords(
   }))
 }
 
+export interface KeywordWithPage {
+  keyword: string
+  page: string
+  clicks: number
+  impressions: number
+  ctr: number
+  position: number
+}
+
+export async function getKeywordsWithPages(
+  accessToken: string,
+  siteUrl: string,
+  startDate: string,
+  endDate: string,
+  rowLimit = 50,
+): Promise<KeywordWithPage[]> {
+  const client = getGSCClient(accessToken)
+  const res = await client.searchanalytics.query({
+    siteUrl,
+    requestBody: {
+      startDate,
+      endDate,
+      dimensions: ["query", "page"],
+      rowLimit,
+    },
+  })
+  return (res.data.rows ?? []).map((r) => ({
+    keyword: r.keys?.[0] ?? "",
+    page: r.keys?.[1] ?? "",
+    clicks: r.clicks ?? 0,
+    impressions: r.impressions ?? 0,
+    ctr: (r.ctr ?? 0) * 100,
+    position: r.position ?? 0,
+  }))
+}
+
 export async function getLandingPages(
   accessToken: string,
   siteUrl: string,

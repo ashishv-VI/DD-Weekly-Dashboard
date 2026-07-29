@@ -3,11 +3,12 @@ import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
 import { verifyClientToken, COOKIE_NAME } from "@/lib/auth/client-auth"
 import { db } from "@/lib/db"
-import { clients, users } from "@/lib/db/schema"
-import { eq, isNotNull, and } from "drizzle-orm"
+import { clients } from "@/lib/db/schema"
+import { eq } from "drizzle-orm"
 import { getGSCMetrics, getTopKeywords } from "@/lib/google/gsc"
 import { getGA4Metrics } from "@/lib/google/ga4"
 import { getDateRange } from "@/lib/dateRange"
+import { getSuperAdminToken } from "@/lib/auth/get-super-admin-token"
 
 function generateSummary(
   clientName: string,
@@ -84,16 +85,18 @@ export async function GET(req: Request) {
 
   const { searchParams } = new URL(req.url)
   const range = searchParams.get("range") || "30d"
+  const qStart = searchParams.get("startDate")
+  const qEnd = searchParams.get("endDate")
 
   const [client] = await db.select().from(clients).where(eq(clients.id, payload.sub)).limit(1)
   if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 })
 
-  const [teamMember] = await db.select().from(users).where(and(isNotNull(users.googleAccessToken), eq(users.role, "super_admin"))).limit(1)
-
-  const accessToken = teamMember?.googleAccessToken ?? null
+  const accessToken = await getSuperAdminToken()
   if (!accessToken) return NextResponse.json({ error: "No Google account connected" }, { status: 400 })
 
-  const { startDate, endDate } = getDateRange(range)
+  const { startDate, endDate } = (qStart && qEnd)
+    ? { startDate: qStart, endDate: qEnd }
+    : getDateRange(range)
 
   const [gsc, ga4, keywords] = await Promise.all([
     client.gscSiteUrl ? getGSCMetrics(accessToken, client.gscSiteUrl, startDate, endDate) : Promise.resolve(null),

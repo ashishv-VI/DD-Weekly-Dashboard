@@ -1,8 +1,9 @@
 export const dynamic = "force-dynamic"
 import { NextResponse } from "next/server"
 import { db } from "@/lib/db"
-import { clients, users } from "@/lib/db/schema"
-import { eq, isNotNull } from "drizzle-orm"
+import { clients } from "@/lib/db/schema"
+import { eq } from "drizzle-orm"
+import { getSuperAdminToken } from "@/lib/auth/get-super-admin-token"
 import { getGSCMetrics, getTopKeywords } from "@/lib/google/gsc"
 import { getGA4Metrics } from "@/lib/google/ga4"
 import { getDateRange } from "@/lib/dateRange"
@@ -11,32 +12,6 @@ import { Resend } from "resend"
 
 const ADMIN_EMAIL = process.env.REPORT_TO_EMAIL ?? "damcodigitalseo@gmail.com"
 
-async function getValidToken(teamMember: { googleAccessToken: string | null; googleRefreshToken: string | null; email: string }): Promise<string | null> {
-  if (!teamMember.googleAccessToken) return null
-
-  // Try refresh if refresh token available
-  if (teamMember.googleRefreshToken) {
-    try {
-      const res = await fetch("https://oauth2.googleapis.com/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          client_id: process.env.GOOGLE_CLIENT_ID!,
-          client_secret: process.env.GOOGLE_CLIENT_SECRET!,
-          grant_type: "refresh_token",
-          refresh_token: teamMember.googleRefreshToken,
-        }),
-      })
-      const data = await res.json()
-      if (res.ok && data.access_token) {
-        await db.update(users).set({ googleAccessToken: data.access_token as string }).where(eq(users.email, teamMember.email))
-        return data.access_token as string
-      }
-    } catch { /* fall through to stored token */ }
-  }
-
-  return teamMember.googleAccessToken
-}
 
 export async function GET(req: Request) {
   const authHeader = req.headers.get("authorization")
@@ -45,22 +20,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  let accessToken: string | null = null
-
-  // Try service account first (preferred)
-  if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
-    try {
-      const { getServiceAccountToken } = await import("@/lib/google/service-account")
-      accessToken = await getServiceAccountToken()
-    } catch { /* fall through */ }
-  }
-
-  // Fallback to OAuth token
-  if (!accessToken) {
-    const [teamMember] = await db.select().from(users).where(isNotNull(users.googleAccessToken)).limit(1)
-    if (teamMember) accessToken = await getValidToken(teamMember)
-  }
-
+  const accessToken = await getSuperAdminToken()
   if (!accessToken) {
     return NextResponse.json({ error: "No Google access token available" }, { status: 400 })
   }
