@@ -37,18 +37,110 @@ function getContrastText(hex: string): string {
 interface RankingMapping { keyword: string; prevRank: string; currentRank: string; volume: string; url: string; location: string }
 interface RankingRow { keyword: string; prevRank: number | null; currentRank: number | null; volume: number | null; url: string; location: string }
 interface RankingConfig { type: "excel" | "gsheet"; gsheetUrl: string; gsheetTab: string; mapping: RankingMapping; data: RankingRow[]; rowCount: number; updatedAt: string }
+interface BacklinkMonth { month: string; count: number } // month: "2026-07"
 
-function parseNotes(raw: string | null): { industry: string; country: string; assignedTo: string; notes: string; logoUrl: string; themeColor: string; textOnTheme: string; rankingConfig: RankingConfig | null } {
-  if (!raw) return { industry: "", country: "", assignedTo: "", notes: "", logoUrl: "", themeColor: "", textOnTheme: "", rankingConfig: null }
+function parseNotes(raw: string | null): { industry: string; country: string; assignedTo: string; notes: string; logoUrl: string; themeColor: string; textOnTheme: string; rankingConfig: RankingConfig | null; backlinkMonths: BacklinkMonth[] } {
+  if (!raw) return { industry: "", country: "", assignedTo: "", notes: "", logoUrl: "", themeColor: "", textOnTheme: "", rankingConfig: null, backlinkMonths: [] }
   try {
     const p = JSON.parse(raw)
-    if (p && p._v === 1) return { industry: p.industry || "", country: p.country || "", assignedTo: p.assignedTo || "", notes: p.notes || "", logoUrl: p.logoUrl || "", themeColor: p.themeColor || "", textOnTheme: p.textOnTheme || "", rankingConfig: p.rankingConfig ?? null }
+    if (p && p._v === 1) return { industry: p.industry || "", country: p.country || "", assignedTo: p.assignedTo || "", notes: p.notes || "", logoUrl: p.logoUrl || "", themeColor: p.themeColor || "", textOnTheme: p.textOnTheme || "", rankingConfig: p.rankingConfig ?? null, backlinkMonths: Array.isArray(p.backlinkMonths) ? p.backlinkMonths : [] }
   } catch {}
-  return { industry: "", country: "", assignedTo: "", notes: raw, logoUrl: "", themeColor: "", textOnTheme: "", rankingConfig: null }
+  return { industry: "", country: "", assignedTo: "", notes: raw, logoUrl: "", themeColor: "", textOnTheme: "", rankingConfig: null, backlinkMonths: [] }
 }
 
-function serializeNotes(industry: string, country: string, assignedTo: string, notes: string, logoUrl: string, themeColor: string, textOnTheme: string, rankingConfig: RankingConfig | null): string {
-  return JSON.stringify({ _v: 1, industry, country, assignedTo, notes, logoUrl, themeColor, textOnTheme, rankingConfig })
+function serializeNotes(industry: string, country: string, assignedTo: string, notes: string, logoUrl: string, themeColor: string, textOnTheme: string, rankingConfig: RankingConfig | null, backlinkMonths: BacklinkMonth[]): string {
+  return JSON.stringify({ _v: 1, industry, country, assignedTo, notes, logoUrl, themeColor, textOnTheme, rankingConfig, backlinkMonths })
+}
+
+// ─── Backlinks Card ───────────────────────────────────────────────────────────
+
+function BacklinksCard({ months, onSave }: { months: BacklinkMonth[]; onSave: (months: BacklinkMonth[]) => void }) {
+  const now = new Date()
+  const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
+  const [inputMonth, setInputMonth] = useState(defaultMonth)
+  const [inputCount, setInputCount] = useState("")
+  const [saved, setSaved] = useState(false)
+
+  const monthLabel = (m: string) => {
+    const [y, mo] = m.split("-")
+    return new Date(parseInt(y), parseInt(mo) - 1, 1).toLocaleDateString("en-GB", { month: "long", year: "numeric" })
+  }
+
+  const handleAdd = () => {
+    const count = parseInt(inputCount, 10)
+    if (!inputMonth || isNaN(count) || count < 0) return
+    const existing = months.filter(m => m.month !== inputMonth)
+    const newMonths = [{ month: inputMonth, count }, ...existing].sort((a, b) => b.month.localeCompare(a.month))
+    onSave(newMonths)
+    setInputCount("")
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
+
+  const handleDelete = (month: string) => onSave(months.filter(m => m.month !== month))
+
+  return (
+    <div className="border border-gray-200 rounded-xl p-4 space-y-4">
+      <div className="flex items-start justify-between">
+        <div>
+          <div className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+            <span>🔗</span> Backlinks Tracking
+          </div>
+          <div className="text-xs text-gray-400 mt-0.5">Monthly backlinks created — affects the client&apos;s overall performance score (10% weight)</div>
+        </div>
+        <span className="text-[10px] bg-purple-50 text-purple-700 border border-purple-100 px-2 py-0.5 rounded-full font-semibold shrink-0">10% weight</span>
+      </div>
+
+      <div className="flex gap-2 items-end flex-wrap">
+        <div className="min-w-[140px] flex-1">
+          <label className="block text-xs font-semibold text-gray-600 mb-1">Month</label>
+          <input type="month" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+            value={inputMonth} onChange={e => setInputMonth(e.target.value)} />
+        </div>
+        <div className="min-w-[140px] flex-1">
+          <label className="block text-xs font-semibold text-gray-600 mb-1">Backlinks Created</label>
+          <input type="number" min="0" placeholder="e.g. 45"
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+            value={inputCount} onChange={e => setInputCount(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && handleAdd()} />
+        </div>
+        <button type="button" onClick={handleAdd}
+          className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-purple-700 transition-colors whitespace-nowrap">
+          {saved ? "✓ Saved" : "Add / Update"}
+        </button>
+      </div>
+
+      {months.length > 0 && (
+        <div className="border border-gray-100 rounded-lg overflow-hidden">
+          <div className="bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">History</div>
+          {months.map((m, i) => {
+            const prev = months[i + 1]
+            const diff = prev ? m.count - prev.count : null
+            return (
+              <div key={m.month} className={`flex items-center justify-between px-3 py-2.5 text-sm ${i < months.length - 1 ? "border-b border-gray-100" : ""}`}>
+                <span className="text-gray-700 font-medium">{monthLabel(m.month)}</span>
+                <div className="flex items-center gap-3">
+                  <span className="font-bold text-purple-700">{m.count} backlinks</span>
+                  {diff !== null && (
+                    <span className={`text-xs font-semibold ${diff >= 0 ? "text-green-600" : "text-red-500"}`}>
+                      {diff >= 0 ? `↑ +${diff}` : `↓ ${diff}`} vs prev
+                    </span>
+                  )}
+                  <button type="button" onClick={() => handleDelete(m.month)} className="text-gray-300 hover:text-red-500 transition-colors text-xs ml-1">✕</button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {months.length === 0 && (
+        <div className="text-xs text-gray-400 text-center py-2 border border-dashed border-gray-200 rounded-lg">
+          No backlink data added yet — add the first month above
+        </div>
+      )}
+    </div>
+  )
 }
 
 const INDUSTRIES = ["Technology", "E-commerce", "Healthcare", "Finance", "Real Estate", "Education", "Travel", "Manufacturing", "Legal", "Retail", "Other"]
@@ -351,6 +443,7 @@ export default function ClientDetailPage() {
     ga4PropertyId: "", gscSiteUrl: "", status: "",
     industry: "", country: "", assignedTo: "", notes: "", logoUrl: "", themeColor: "", textOnTheme: "",
     rankingConfig: null as RankingConfig | null,
+    backlinkMonths: [] as BacklinkMonth[],
   })
 
   useEffect(() => {
@@ -362,6 +455,7 @@ export default function ClientDetailPage() {
         ga4PropertyId: d.ga4PropertyId || "", gscSiteUrl: d.gscSiteUrl || "", status: d.status || "active",
         industry: meta.industry, country: meta.country, assignedTo: meta.assignedTo, notes: meta.notes, logoUrl: meta.logoUrl, themeColor: meta.themeColor, textOnTheme: meta.textOnTheme,
         rankingConfig: meta.rankingConfig,
+        backlinkMonths: meta.backlinkMonths,
       })
       setLoading(false)
     })
@@ -374,7 +468,7 @@ export default function ClientDetailPage() {
       const body = {
         name: form.name, domain: form.domain, username: form.username, pin: form.pin,
         ga4PropertyId: form.ga4PropertyId, gscSiteUrl: form.gscSiteUrl, status: form.status,
-        notes: serializeNotes(form.industry, form.country, form.assignedTo, form.notes, form.logoUrl, form.themeColor, form.textOnTheme, form.rankingConfig),
+        notes: serializeNotes(form.industry, form.country, form.assignedTo, form.notes, form.logoUrl, form.themeColor, form.textOnTheme, form.rankingConfig, form.backlinkMonths),
       }
       const res = await fetch(`/api/admin/clients/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
       if (!res.ok) throw new Error((await res.json()).error)
@@ -680,6 +774,8 @@ export default function ClientDetailPage() {
             </div>
 
             <RankingConfigCard config={form.rankingConfig} onSave={(cfg) => setForm(f => ({ ...f, rankingConfig: cfg }))} />
+
+            <BacklinksCard months={form.backlinkMonths} onSave={(months) => setForm(f => ({ ...f, backlinkMonths: months }))} />
 
             <div className="flex items-center justify-end pt-2">
               <button type="submit" disabled={saving}

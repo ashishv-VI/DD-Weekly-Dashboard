@@ -74,58 +74,64 @@ function formatPageUrl(url: string): string {
 
 function AiPlatformIcon({ source }: { source: string }) {
   const s = source.toLowerCase()
+  // ChatGPT / OpenAI — green with OpenAI swirl shape
   if (s.includes("openai") || s.includes("chatgpt")) {
     return (
       <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style={{ background: "#10a37f" }}>
-        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
-          <path d="M12 3v2.5M12 18.5v2.5M3 12h2.5M18.5 12h2.5M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/>
+        <svg className="w-[18px] h-[18px]" viewBox="0 0 41 41" fill="white">
+          <path d="M37.532 16.87a9.963 9.963 0 0 0-.856-8.184 10.079 10.079 0 0 0-10.855-4.835 9.964 9.964 0 0 0-6.498-2.63 10.079 10.079 0 0 0-9.614 6.977 9.967 9.967 0 0 0-6.664 4.834 10.08 10.08 0 0 0 1.24 11.817 9.965 9.965 0 0 0 .856 8.185 10.079 10.079 0 0 0 10.855 4.835 9.965 9.965 0 0 0 6.498 2.63 10.079 10.079 0 0 0 9.617-6.981 9.967 9.967 0 0 0 6.663-4.834 10.079 10.079 0 0 0-1.243-11.813zM22.498 37.886a7.474 7.474 0 0 1-4.799-1.735c.061-.033.168-.091.237-.134l7.964-4.6a1.294 1.294 0 0 0 .655-1.134V19.054l3.366 1.944a.12.12 0 0 1 .066.092v9.299a7.505 7.505 0 0 1-7.49 7.496zM6.392 31.006a7.471 7.471 0 0 1-.894-5.023c.06.036.162.099.237.141l7.964 4.6a1.297 1.297 0 0 0 1.308 0l9.724-5.614v3.888a.12.12 0 0 1-.048.103l-8.051 4.649a7.504 7.504 0 0 1-10.24-2.744zM4.297 13.62A7.469 7.469 0 0 1 8.2 10.333c0 .068-.004.19-.004.274v9.201a1.294 1.294 0 0 0 .654 1.132l9.723 5.614-3.366 1.944a.12.12 0 0 1-.114.012L7.044 23.86a7.504 7.504 0 0 1-2.747-10.24zm27.658 6.437l-9.724-5.615 3.367-1.943a.121.121 0 0 1 .114-.012l8.048 4.648a7.498 7.498 0 0 1-1.158 13.528v-9.476a1.293 1.293 0 0 0-.647-1.13zm3.35-5.043c-.059-.037-.162-.099-.236-.141l-7.965-4.6a1.298 1.298 0 0 0-1.308 0l-9.723 5.614v-3.888a.12.12 0 0 1 .048-.103l8.05-4.645a7.497 7.497 0 0 1 11.135 7.763zm-21.063 6.929l-3.367-1.944a.12.12 0 0 1-.065-.092v-9.299a7.497 7.497 0 0 1 12.293-5.756 6.94 6.94 0 0 0-.236.134l-7.965 4.6a1.294 1.294 0 0 0-.654 1.132l-.006 11.225zm1.829-3.943l4.33-2.501 4.332 2.5v4.999l-4.331 2.5-4.331-2.5V18z"/>
         </svg>
       </div>
     )
   }
+  // Gemini — Google Gemini 4-pointed star with blue-purple gradient
   if (s.includes("gemini") || s.includes("bard")) {
     return (
-      <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style={{ background: "linear-gradient(135deg, #4285f4 0%, #a855f7 100%)" }}>
-        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="white">
-          <path d="M12 2C11.8 2 11.8 7 10.5 10.5C7 11.8 2 12 2 12C2 12 7 12.2 10.5 13.5C11.8 17 12 22 12 22C12 22 12.2 17 13.5 13.5C17 12.2 22 12 22 12C22 12 17 11.8 13.5 10.5C12.2 7 12 2 12 2Z"/>
+      <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style={{ background: "linear-gradient(135deg, #4285f4 0%, #8b5cf6 100%)" }}>
+        <svg className="w-[18px] h-[18px]" viewBox="0 0 28 28" fill="white">
+          <path d="M14 28A14 14 0 0 1 14 0a14.019 14.019 0 0 1-4 9.98 14.019 14.019 0 0 1-10 4A14.019 14.019 0 0 1 10 18a14.019 14.019 0 0 1 4 10z"/>
+          <path d="M14 28a14.019 14.019 0 0 1 4-10 14.019 14.019 0 0 1 10-4A14.019 14.019 0 0 1 18 10a14.019 14.019 0 0 1-4-10A14 14 0 0 1 14 28z"/>
         </svg>
       </div>
     )
   }
+  // Perplexity — dark with their compass/asterisk mark
   if (s.includes("perplexity")) {
     return (
-      <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style={{ background: "#1c1c1e" }}>
-        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round">
-          <line x1="12" y1="3" x2="12" y2="8"/>
-          <line x1="12" y1="16" x2="12" y2="21"/>
-          <line x1="3" y1="12" x2="8" y2="12"/>
-          <line x1="16" y1="12" x2="21" y2="12"/>
-          <line x1="6" y1="6" x2="9" y2="9"/>
-          <line x1="15" y1="15" x2="18" y2="18"/>
-          <line x1="6" y1="18" x2="9" y2="15"/>
-          <line x1="15" y1="9" x2="18" y2="6"/>
+      <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style={{ background: "#1a1a2e" }}>
+        <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
         </svg>
       </div>
     )
   }
+  // Claude / Anthropic — warm orange with C mark
   if (s.includes("claude") || s.includes("anthropic")) {
     return (
-      <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style={{ background: "#D97757" }}>
-        <span className="text-white text-sm font-bold leading-none tracking-tight">C</span>
+      <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style={{ background: "#CC785C" }}>
+        <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="white">
+          <path d="M7.8 2.3C4.5 3.5 2 6.5 2 12c0 5.5 2.5 8.5 5.8 9.7L9.3 19c-2-.8-3.3-3-3.3-7s1.3-6.2 3.3-7L7.8 2.3zm8.4 0L14.7 5c2 .8 3.3 3 3.3 7s-1.3 6.2-3.3 7l1.5 2.7C19.5 20.5 22 17.5 22 12c0-5.5-2.5-8.5-5.8-9.7z"/>
+        </svg>
       </div>
     )
   }
+  // Microsoft Copilot — blue with Copilot icon
   if (s.includes("copilot") || s.includes("bing")) {
     return (
-      <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style={{ background: "#0078d4" }}>
-        <span className="text-white text-xs font-bold leading-none tracking-tight">Co</span>
+      <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style={{ background: "linear-gradient(135deg, #0078d4 0%, #2b88d8 100%)" }}>
+        <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="white">
+          <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 3.5c1.5 0 2.8.6 3.8 1.5L7.5 15.8A6.467 6.467 0 0 1 5.5 12c0-3.584 2.916-6.5 6.5-6.5zm0 13c-1.5 0-2.8-.6-3.8-1.5l8.3-8.8c.7 1 1 2.1 1 3.3 0 3.584-2.916 6.5-6.5 6.5z"/>
+        </svg>
       </div>
     )
   }
+  // Meta AI
   if (s.includes("meta") || s.includes("llama")) {
     return (
-      <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style={{ background: "linear-gradient(135deg, #0866ff 0%, #a855f7 100%)" }}>
-        <span className="text-white text-sm font-bold leading-none">M</span>
+      <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style={{ background: "linear-gradient(135deg, #0082fb 0%, #a855f7 100%)" }}>
+        <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="white">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/>
+        </svg>
       </div>
     )
   }
@@ -161,7 +167,7 @@ function downloadCSV(filename: string, headers: string[], rows: (string | number
 
 // ─── Health Score ─────────────────────────────────────────────────────────────
 
-function calcHealthScore(gsc: GSCTotals | undefined, ga4: Partial<GA4Totals> | undefined, aiTraffic: AITrafficData | null | undefined, rankingRows: RankingRow[] = []) {
+function calcHealthScore(gsc: GSCTotals | undefined, ga4: Partial<GA4Totals> | undefined, aiTraffic: AITrafficData | null | undefined, rankingRows: RankingRow[] = [], backlinks?: { current: number | null; previous: number | null }) {
   const comps: { label: string; value: number; score: number }[] = []
   let weighted = 0, totalWeight = 0
 
@@ -208,10 +214,51 @@ function calcHealthScore(gsc: GSCTotals | undefined, ga4: Partial<GA4Totals> | u
     weighted += rkScore * 20; totalWeight += 20
   }
 
+  // Backlinks — only when data is provided by admin
+  if (backlinks && backlinks.current !== null) {
+    const blCurr = backlinks.current
+    const blPrev = backlinks.previous
+    let blScore: number
+    if (blPrev === null || blPrev === 0) {
+      blScore = 60 // neutral — first month or no comparison
+    } else {
+      const ratio = blCurr / blPrev
+      blScore = ratio >= 1 ? 80 : ratio >= 0.75 ? 60 : ratio >= 0.5 ? 40 : 20
+    }
+    comps.push({ label: "Backlinks", value: blCurr, score: blScore })
+    weighted += blScore * 10; totalWeight += 10
+  }
+
   const score = totalWeight > 0 ? Math.round(weighted / totalWeight) : 0
   const label = score >= 85 ? "Excellent" : score >= 70 ? "Good" : score >= 50 ? "Fair" : "Needs Work"
   const color = score >= 85 ? "#16a34a" : score >= 70 ? "#2563eb" : score >= 50 ? "#d97706" : "#dc2626"
   return { score, label, color, comps }
+}
+
+// ─── Score change reason ──────────────────────────────────────────────────────
+
+function getScoreChangeReason(
+  currComps: { label: string; value: number; score: number }[],
+  prevComps: { label: string; value: number; score: number }[]
+): string | null {
+  let biggestDrop: { label: string; scoreDiff: number; currValue: number; prevValue: number } | null = null
+  for (const curr of currComps) {
+    const prev = prevComps.find(p => p.label === curr.label)
+    if (!prev) continue
+    const scoreDiff = curr.score - prev.score
+    if (scoreDiff < 0 && (!biggestDrop || scoreDiff < biggestDrop.scoreDiff)) {
+      biggestDrop = { label: curr.label, scoreDiff, currValue: curr.value, prevValue: prev.value }
+    }
+  }
+  if (!biggestDrop) return null
+  const { label, currValue, prevValue } = biggestDrop
+  if (label === "Average Position") return `Google Ranking slipped from position ${prevValue.toFixed(1)} to ${currValue.toFixed(1)}`
+  if (label === "Click-Through Rate") return `Click rate dropped from ${prevValue.toFixed(1)}% to ${currValue.toFixed(1)}%`
+  if (label === "Traffic Growth") return `Organic traffic declined vs previous period`
+  if (label === "Engagement Rate") return `Visitor engagement dropped to ${currValue.toFixed(0)}%`
+  if (label === "Keyword Rankings") return `Keyword rankings weakened this month`
+  if (label === "Backlinks") return `Fewer backlinks were built this month vs last month`
+  return `${label} performance declined`
 }
 
 function calcSubScores(
@@ -1015,11 +1062,16 @@ function ScoreHistoryCard({ score }: { score: number }) {
 
 // ─── Premium Health Score Card ────────────────────────────────────────────────
 
-function PremiumHealthCard({ score, gsc, ga4, multiPs }: {
+function PremiumHealthCard({ score, gsc, ga4, multiPs, monthLabel, prevScore, prevMonthLabel, changeReason, comps }: {
   score: number
   gsc: GSCTotals | undefined
   ga4: Partial<GA4Totals> | undefined
   multiPs: MultiPageSpeed[]
+  monthLabel?: string
+  prevScore?: number | null
+  prevMonthLabel?: string
+  changeReason?: string | null
+  comps?: { label: string; value: number; score: number }[]
 }) {
   const C = 2 * Math.PI * 50 // circumference ~314
   const offset = C * (1 - Math.min(score, 100) / 100)
@@ -1141,14 +1193,31 @@ function PremiumHealthCard({ score, gsc, ga4, multiPs }: {
         </div>
 
         {/* Info side */}
-        <div className="flex flex-col justify-between gap-4 px-6 py-5">
+        <div className="flex flex-col justify-between gap-3 px-6 py-5">
+          {/* Title + month + vs comparison */}
           <div>
             <div className="text-[15px] font-bold text-slate-900">Overall Performance Score</div>
-            <div className="text-xs text-slate-400 flex items-center gap-1 mt-1">
-              <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-              Fixed to last 30 days — doesn&apos;t change with date filters
+            <div className="flex flex-wrap items-center gap-2 mt-1">
+              {monthLabel ? (
+                <span className="text-xs text-slate-500 flex items-center gap-1 font-medium">
+                  <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                  {monthLabel}
+                </span>
+              ) : (
+                <span className="text-xs text-slate-400">Monthly Score</span>
+              )}
+              {prevScore !== null && prevScore !== undefined && prevMonthLabel && (
+                <span className="text-[11px] px-2 py-0.5 rounded-full font-semibold" style={{
+                  background: score >= prevScore ? "#dcfce7" : "#fee2e2",
+                  color: score >= prevScore ? "#15803d" : "#b91c1c",
+                }}>
+                  {score >= prevScore ? `↑ +${score - prevScore}` : `↓ ${score - prevScore}`} vs {prevMonthLabel} ({prevScore})
+                </span>
+              )}
             </div>
           </div>
+
+          {/* Progress bar */}
           <div className="flex flex-col gap-1.5">
             <div className="flex justify-between text-xs text-slate-500">
               <span className="font-medium">Progress toward target (70)</span>
@@ -1164,12 +1233,48 @@ function PremiumHealthCard({ score, gsc, ga4, multiPs }: {
               </div>
             </div>
           </div>
+
+          {/* Score breakdown — what is driving / dragging the score */}
+          {comps && comps.length > 0 && (
+            <div className="border border-slate-100 rounded-lg overflow-hidden">
+              {comps.map((c, i) => {
+                const isGood = c.score >= 70
+                const isWarn = c.score >= 40 && c.score < 70
+                const dot = isGood ? "#16a34a" : isWarn ? "#d97706" : "#dc2626"
+                const icon = isGood ? "✅" : isWarn ? "⚠️" : "❌"
+                const valDisplay = c.label === "Average Position" ? `Pos ${c.value.toFixed(1)}`
+                  : c.label === "Click-Through Rate" ? `${c.value.toFixed(2)}%`
+                  : c.label === "Traffic Growth" ? `${c.value >= 0 ? "+" : ""}${c.value.toFixed(1)}%`
+                  : c.label === "Engagement Rate" ? `${c.value.toFixed(0)}%`
+                  : c.label === "Backlinks" ? `${Math.round(c.value)} built`
+                  : `${c.value.toFixed(0)}`
+                return (
+                  <div key={c.label} className={`flex items-center gap-2 px-3 py-1.5 text-xs ${i < comps.length - 1 ? "border-b border-slate-50" : ""} ${!isGood && !isWarn ? "bg-red-50" : ""}`}>
+                    <span style={{ color: dot }} className="shrink-0">{icon}</span>
+                    <span className="text-slate-600 flex-1 font-medium">{c.label}</span>
+                    <span className="text-slate-500 tabular-nums">{valDisplay}</span>
+                    <span className="tabular-nums font-semibold w-12 text-right" style={{ color: dot }}>{c.score}/100</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Why score changed */}
+          {changeReason && (
+            <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+              <span className="shrink-0 mt-0.5">💡</span>
+              <span><strong>Why score changed:</strong> {changeReason}</span>
+            </div>
+          )}
+
+          {/* Score band legend */}
           <div className="flex flex-wrap gap-1.5">
             {([
-              { range: "85–100", label: "Excellent",          color: "#15803d", bg: "#dcfce7" },
-              { range: "70–84",  label: "Good",               color: "#0369a1", bg: "#dbeafe" },
+              { range: "85–100", label: "Excellent",                   color: "#15803d", bg: "#dcfce7" },
+              { range: "70–84",  label: "Good",                        color: "#0369a1", bg: "#dbeafe" },
               { range: "50–69",  label: "Fair (Needs Improvement)",    color: "#a16207", bg: "#fefce8" },
-              { range: "0–49",   label: "Needs Improvement",  color: "#b91c1c", bg: "#fee2e2" },
+              { range: "0–49",   label: "Needs Improvement",           color: "#b91c1c", bg: "#fee2e2" },
             ] as const).map(b => (
               <span key={b.range} className="text-[10px] px-2.5 py-0.5 rounded-full font-semibold" style={{ color: b.color, background: b.bg, border: `1px solid ${b.color}22`, opacity: band.label === b.label ? 1 : 0.35 }}>
                 {b.range} · {b.label}{band.label === b.label ? " ◀" : ""}
@@ -1191,7 +1296,13 @@ export default function ClientDashboard() {
   const [data, setData] = useState<ApiData | null>(null)
   const [loading, setLoading] = useState(true)
   const [rangePreset, setRangePreset] = useState("30d")
-  const [health30d, setHealth30d] = useState<{ score: number; label: string; color: string } | null>(null)
+  const [monthlyScore, setMonthlyScore] = useState<{
+    score: number; label: string; color: string
+    comps: { label: string; value: number; score: number }[]
+    prevScore: number | null; monthLabel: string; prevMonthLabel: string
+    changeReason: string | null
+  } | null>(null)
+  const [backlinks, setBacklinks] = useState<{ current: number | null; previous: number | null; monthLabel: string } | null>(null)
   const [customStart, setCustomStart] = useState("")
   const [customEnd, setCustomEnd] = useState("")
   const [activeTab, setActiveTab] = useState<TabKey>("overview")
@@ -1262,21 +1373,66 @@ export default function ClientDashboard() {
     return () => ctrl.abort()
   }, [client, rangePreset, customStart, customEnd])
 
-  // Fetch fixed 30-day data + rankings once for the health score — so it never changes with date range
+  // Fetch current-month + previous-month data once to build the stable Monthly Performance Score.
+  // Using calendar months (not rolling 30d) so the score is consistent all month long.
   useEffect(() => {
-    if (!client || health30d) return
+    if (!client || monthlyScore) return
+    const now = new Date()
+    const yd = new Date(now); yd.setDate(now.getDate() - 1)
+    const fmtDate = (d: Date) => d.toISOString().split("T")[0]
+
+    // Current month: 1st → yesterday
+    const currStart = new Date(now.getFullYear(), now.getMonth(), 1)
+    const currEnd = yd
+
+    // Previous month: 1st → last day
+    const prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    const prevEnd = new Date(now.getFullYear(), now.getMonth(), 0)
+
+    const monthLabel = now.toLocaleDateString("en-GB", { month: "long", year: "numeric" })
+    const prevMonthLabel = prevStart.toLocaleDateString("en-GB", { month: "long", year: "numeric" })
+    const currMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
+    const prevMonthKey = `${prevStart.getFullYear()}-${String(prevStart.getMonth() + 1).padStart(2, "0")}`
+
     Promise.all([
-      fetch("/api/client/data?range=30d").then(r => r.json()),
+      fetch(`/api/client/data?startDate=${fmtDate(currStart)}&endDate=${fmtDate(currEnd)}`).then(r => r.json()),
+      fetch(`/api/client/data?startDate=${fmtDate(prevStart)}&endDate=${fmtDate(prevEnd)}`).then(r => r.json()),
       fetch("/api/client/rankings").then(r => r.json()).catch(() => ({ data: [], config: null })),
-    ]).then(([d, rankData]) => {
-      const g = d?.gsc?.totals as GSCTotals | undefined
-      const g4 = d?.ga4?.totals as Partial<GA4Totals> | undefined
-      const ai = d?.aiTraffic as AITrafficData | null | undefined
+      fetch("/api/client/backlinks").then(r => r.json()).catch(() => ({ months: [] })),
+    ]).then(([currData, prevData, rankData, blData]) => {
       const rnk = (rankData.data ?? []) as RankingRow[]
       if (rnk.length > 0) setRankings(rnk)
       if (rankData.config) setRankConfig(rankData.config)
-      const h = calcHealthScore(g, g4, ai, rnk)
-      setHealth30d({ score: h.score, label: h.label, color: h.color })
+
+      // Backlinks for current and previous month
+      interface BlMonth { month: string; count: number }
+      const blMonths: BlMonth[] = blData.months ?? []
+      const currBL = blMonths.find((m: BlMonth) => m.month === currMonthKey)?.count ?? null
+      const prevBL = blMonths.find((m: BlMonth) => m.month === prevMonthKey)?.count ?? null
+      setBacklinks({ current: currBL, previous: prevBL, monthLabel })
+
+      // Calculate current month score
+      const cg = currData?.gsc?.totals as GSCTotals | undefined
+      const cg4 = currData?.ga4?.totals as Partial<GA4Totals> | undefined
+      const cai = currData?.aiTraffic as AITrafficData | null | undefined
+      const blParam = currBL !== null ? { current: currBL, previous: prevBL } : undefined
+      const currH = calcHealthScore(cg, cg4, cai, rnk, blParam)
+
+      // Calculate previous month score (for comparison)
+      const pg = prevData?.gsc?.totals as GSCTotals | undefined
+      const pg4 = prevData?.ga4?.totals as Partial<GA4Totals> | undefined
+      const pai = prevData?.aiTraffic as AITrafficData | null | undefined
+      const prevH = calcHealthScore(pg, pg4, pai, rnk)
+
+      const changeReason = getScoreChangeReason(currH.comps, prevH.comps)
+
+      setMonthlyScore({
+        score: currH.score, label: currH.label, color: currH.color,
+        comps: currH.comps,
+        prevScore: prevH.score,
+        monthLabel, prevMonthLabel,
+        changeReason,
+      })
     }).catch(() => {})
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client])
@@ -1595,12 +1751,70 @@ export default function ClientDashboard() {
 
                 {/* Overall Performance Score Card */}
                 <PremiumHealthCard
-                  score={(health30d ?? health).score}
+                  score={monthlyScore?.score ?? 0}
                   gsc={gsc}
                   ga4={ga4 ?? undefined}
                   multiPs={multiPs}
+                  monthLabel={monthlyScore?.monthLabel}
+                  prevScore={monthlyScore?.prevScore}
+                  prevMonthLabel={monthlyScore?.prevMonthLabel}
+                  changeReason={monthlyScore?.changeReason}
+                  comps={monthlyScore?.comps}
                 />
 
+
+                {/* Backlinks Card */}
+                {backlinks && (backlinks.current !== null || backlinks.previous !== null) && (
+                  <div className="bg-white rounded-xl border border-slate-200 overflow-hidden" style={{ boxShadow: "0 1px 2px rgba(0,0,0,.04)" }}>
+                    <div className="px-5 py-4 border-b border-slate-100">
+                      <div className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                        <span>🔗</span> Backlinks This Month
+                      </div>
+                      <div className="text-xs text-slate-400 mt-0.5">Built by Damco Digital · contributes to your performance score</div>
+                    </div>
+                    <div className="px-5 py-4 flex items-center gap-8 flex-wrap">
+                      <div className="text-center">
+                        <div className="text-2xl font-extrabold text-purple-700 tabular-nums">{backlinks.current ?? "—"}</div>
+                        <div className="text-xs text-slate-400 mt-0.5">{backlinks.monthLabel || "This Month"}</div>
+                      </div>
+                      {backlinks.previous !== null && (
+                        <>
+                          <div className="text-center">
+                            <div className="text-2xl font-extrabold text-slate-400 tabular-nums">{backlinks.previous}</div>
+                            <div className="text-xs text-slate-400 mt-0.5">Last Month</div>
+                          </div>
+                          <div className="text-center">
+                            {(() => {
+                              const diff = (backlinks.current ?? 0) - backlinks.previous!
+                              const isUp = diff >= 0
+                              return (
+                                <div className="text-2xl font-extrabold tabular-nums" style={{ color: isUp ? "#16a34a" : "#dc2626" }}>
+                                  {isUp ? `↑ +${diff}` : `↓ ${diff}`}
+                                </div>
+                              )
+                            })()}
+                            <div className="text-xs text-slate-400 mt-0.5">vs Last Month</div>
+                          </div>
+                          <div className="ml-auto">
+                            {(() => {
+                              const curr = backlinks.current ?? 0
+                              const prev = backlinks.previous!
+                              const isGood = curr >= prev
+                              return (
+                                <span className="text-xs font-semibold px-3 py-1.5 rounded-full" style={{
+                                  background: isGood ? "#dcfce7" : "#fee2e2",
+                                  color: isGood ? "#15803d" : "#b91c1c",
+                                }}>
+                                  {isGood ? "✅ On target" : "⚠️ Below last month"}
+                                </span>
+                              )
+                            })()}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* SEO Benchmark Panel */}
                 {gsc && (() => {
@@ -1697,7 +1911,6 @@ export default function ClientDashboard() {
                       <span className="text-sm font-semibold text-slate-700">{fmt(gsc?.clicks)}</span>
                     </div>
                     <MiniBar data={clicksData} dates={gscDaily.map(d => d.date)} color={brand} />
-                    <ExpertInsight text={gscInsight(gsc)} />
                   </div>
                 )}
 
@@ -2410,9 +2623,6 @@ export default function ClientDashboard() {
                       </div>
                     </div>
                   )}
-                  <div className="px-5 pb-4">
-                    <ExpertInsight text={keywordInsight(keywords, brandName)} />
-                  </div>
                 </div>
 
                 {/* Keyword → Landing Page → Performance */}
@@ -2537,9 +2747,6 @@ export default function ClientDashboard() {
                     </div>
                   </div>
                 )}
-                <div className="px-5 pb-5">
-                  <ExpertInsight text="Pages with high impressions but low CTR are opportunities — update meta titles to be more specific and action-oriented. Pages with high engagement time are your best content — cross-link them to lower-performing pages." />
-                </div>
               </div>
             )}
 
@@ -2658,7 +2865,6 @@ export default function ClientDashboard() {
                   </div>
                 )}
 
-                <ExpertInsight text={aiInsight(aiTraffic, totalChannelSessions)} />
               </div>
             )}
 
@@ -2767,9 +2973,6 @@ export default function ClientDashboard() {
                           ))}
                         </tbody>
                       </table>
-                    </div>
-                    <div className="px-5 pb-5">
-                      <ExpertInsight text={engagementInsight(userBreakdown, ga4)} />
                     </div>
                   </div>
                 )}
