@@ -2,6 +2,7 @@
 import { useEffect, useState, useMemo, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { DATE_PRESETS } from "@/lib/dateRange"
+import { calcWeeklyBenchmarks } from "@/lib/benchmarks"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1373,26 +1374,48 @@ export default function ClientDashboard() {
     return () => ctrl.abort()
   }, [client, rangePreset, customStart, customEnd])
 
-  // Fetch current-month + previous-month data once to build the stable Monthly Performance Score.
-  // Using calendar months (not rolling 30d) so the score is consistent all month long.
+  // Fetch performance score for the selected date range.
+  // When user picks June → shows June score vs May. July → July vs June.
+  // Default (no custom dates) → current calendar month vs previous month.
   useEffect(() => {
-    if (!client || monthlyScore) return
+    if (!client) return
+    setMonthlyScore(null) // reset to show loading skeleton while recalculating
+
     const now = new Date()
-    const yd = new Date(now); yd.setDate(now.getDate() - 1)
     const fmtDate = (d: Date) => d.toISOString().split("T")[0]
 
-    // Current month: 1st → yesterday
-    const currStart = new Date(now.getFullYear(), now.getMonth(), 1)
-    const currEnd = yd
+    let currStart: Date, currEnd: Date, prevStart: Date, prevEnd: Date
+    let monthLabel: string, prevMonthLabel: string
+    let currMonthKey: string, prevMonthKey: string
 
-    // Previous month: 1st → last day
-    const prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-    const prevEnd = new Date(now.getFullYear(), now.getMonth(), 0)
+    if (customStart && customEnd) {
+      // User selected a specific date range — score for that exact period
+      currStart = new Date(customStart)
+      currEnd = new Date(customEnd)
 
-    const monthLabel = now.toLocaleDateString("en-GB", { month: "long", year: "numeric" })
-    const prevMonthLabel = prevStart.toLocaleDateString("en-GB", { month: "long", year: "numeric" })
-    const currMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
-    const prevMonthKey = `${prevStart.getFullYear()}-${String(prevStart.getMonth() + 1).padStart(2, "0")}`
+      // Previous period: same duration immediately before currStart
+      const durationMs = currEnd.getTime() - currStart.getTime()
+      prevEnd = new Date(currStart.getTime() - 86400000) // day before selected start
+      prevStart = new Date(prevEnd.getTime() - durationMs)
+
+      const fmtLabel = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+      monthLabel = `${fmtLabel(currStart)} – ${fmtLabel(currEnd)}`
+      prevMonthLabel = `${fmtLabel(prevStart)} – ${fmtLabel(prevEnd)}`
+      currMonthKey = `${currStart.getFullYear()}-${String(currStart.getMonth() + 1).padStart(2, "0")}`
+      prevMonthKey = `${prevStart.getFullYear()}-${String(prevStart.getMonth() + 1).padStart(2, "0")}`
+    } else {
+      // Default: current calendar month (1st → yesterday) vs previous calendar month
+      const yd = new Date(now); yd.setDate(now.getDate() - 1)
+      currStart = new Date(now.getFullYear(), now.getMonth(), 1)
+      currEnd = yd
+      prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+      prevEnd = new Date(now.getFullYear(), now.getMonth(), 0)
+
+      monthLabel = now.toLocaleDateString("en-GB", { month: "long", year: "numeric" })
+      prevMonthLabel = prevStart.toLocaleDateString("en-GB", { month: "long", year: "numeric" })
+      currMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
+      prevMonthKey = `${prevStart.getFullYear()}-${String(prevStart.getMonth() + 1).padStart(2, "0")}`
+    }
 
     Promise.all([
       fetch(`/api/client/data?startDate=${fmtDate(currStart)}&endDate=${fmtDate(currEnd)}`).then(r => r.json()),
@@ -1404,21 +1427,21 @@ export default function ClientDashboard() {
       if (rnk.length > 0) setRankings(rnk)
       if (rankData.config) setRankConfig(rankData.config)
 
-      // Backlinks for current and previous month
+      // Backlinks for current and previous period
       interface BlMonth { month: string; count: number }
       const blMonths: BlMonth[] = blData.months ?? []
       const currBL = blMonths.find((m: BlMonth) => m.month === currMonthKey)?.count ?? null
       const prevBL = blMonths.find((m: BlMonth) => m.month === prevMonthKey)?.count ?? null
       setBacklinks({ current: currBL, previous: prevBL, monthLabel })
 
-      // Calculate current month score
+      // Calculate score for selected period
       const cg = currData?.gsc?.totals as GSCTotals | undefined
       const cg4 = currData?.ga4?.totals as Partial<GA4Totals> | undefined
       const cai = currData?.aiTraffic as AITrafficData | null | undefined
       const blParam = currBL !== null ? { current: currBL, previous: prevBL } : undefined
       const currH = calcHealthScore(cg, cg4, cai, rnk, blParam)
 
-      // Calculate previous month score (for comparison)
+      // Calculate score for previous period (for comparison badge)
       const pg = prevData?.gsc?.totals as GSCTotals | undefined
       const pg4 = prevData?.ga4?.totals as Partial<GA4Totals> | undefined
       const pai = prevData?.aiTraffic as AITrafficData | null | undefined
@@ -1435,7 +1458,7 @@ export default function ClientDashboard() {
       })
     }).catch(() => {})
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client])
+  }, [client, customStart, customEnd, rangePreset])
 
   const handleLogout = async () => { await fetch("/api/client/logout", { method: "POST" }); router.push("/client/login") }
 
@@ -1763,15 +1786,20 @@ export default function ClientDashboard() {
                 />
 
 
-                {/* Backlinks Card */}
-                {backlinks && (backlinks.current !== null || backlinks.previous !== null) && (
-                  <div className="bg-white rounded-xl border border-slate-200 overflow-hidden" style={{ boxShadow: "0 1px 2px rgba(0,0,0,.04)" }}>
-                    <div className="px-5 py-4 border-b border-slate-100">
+                {/* Backlinks Card — always visible */}
+                <div className="bg-white rounded-xl border border-slate-200 overflow-hidden" style={{ boxShadow: "0 1px 2px rgba(0,0,0,.04)" }}>
+                  <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+                    <div>
                       <div className="text-sm font-semibold text-slate-900 flex items-center gap-2">
                         <span>🔗</span> Backlinks This Month
                       </div>
                       <div className="text-xs text-slate-400 mt-0.5">Built by Damco Digital · contributes to your performance score</div>
                     </div>
+                    <span className="text-[10px] bg-purple-50 text-purple-700 border border-purple-100 px-2 py-0.5 rounded-full font-semibold shrink-0">10% of score</span>
+                  </div>
+
+                  {backlinks && (backlinks.current !== null || backlinks.previous !== null) ? (
+                    /* Data available — show stats */
                     <div className="px-5 py-4 flex items-center gap-8 flex-wrap">
                       <div className="text-center">
                         <div className="text-2xl font-extrabold text-purple-700 tabular-nums">{backlinks.current ?? "—"}</div>
@@ -1813,16 +1841,89 @@ export default function ClientDashboard() {
                         </>
                       )}
                     </div>
-                  </div>
-                )}
+                  ) : (
+                    /* No data yet — show empty state */
+                    <div className="px-5 py-8 flex flex-col items-center text-center gap-2">
+                      <div className="w-10 h-10 rounded-full bg-purple-50 flex items-center justify-center text-xl mb-1">🔗</div>
+                      <div className="text-sm font-semibold text-slate-700">Backlink data coming soon</div>
+                      <div className="text-xs text-slate-400 max-w-xs leading-relaxed">
+                        Your Damco team updates this each month. Once added, this section will show how many backlinks were built and how your score has improved.
+                      </div>
+                    </div>
+                  )}
+                </div>
 
                 {/* SEO Benchmark Panel */}
                 {gsc && (() => {
+                  const blBenchInfo = ((): BenchmarkInfo => {
+                    const levels = {
+                      excellent: { status: "Excellent" as const, statusColor: "#15803d", statusBg: "#dcfce7" },
+                      good:      { status: "Good"      as const, statusColor: "#0369a1", statusBg: "#dbeafe" },
+                      average:   { status: "Average"   as const, statusColor: "#c2410c", statusBg: "#ffedd5" },
+                      poor:      { status: "Poor"      as const, statusColor: "#b91c1c", statusBg: "#fee2e2" },
+                    }
+                    const curr = backlinks?.current ?? null
+                    const prev = backlinks?.previous ?? null
+                    if (curr === null) return { bench: "↑ Monthly", ...levels.average, insight: "Backlink data will appear once your team updates it this month." }
+                    if (prev === null || prev === 0) return { bench: "↑ Monthly", ...levels.good, insight: `${curr} backlinks built this month. Monthly tracking is now active.` }
+                    const diff = curr - prev
+                    const ratio = curr / prev
+                    if (ratio >= 1.2) return { bench: "↑ Monthly", ...levels.excellent, insight: `${curr} backlinks built — up ${diff} vs last month (+${((ratio - 1) * 100).toFixed(0)}%). Strong link growth.` }
+                    if (ratio >= 1)   return { bench: "↑ Monthly", ...levels.good,      insight: `${curr} backlinks this month vs ${prev} last month — up ${diff}. On track.` }
+                    if (ratio >= 0.75) return { bench: "↑ Monthly", ...levels.average,  insight: `${curr} backlinks vs ${prev} last month. Slightly below previous month's pace.` }
+                    return                    { bench: "↑ Monthly", ...levels.poor,      insight: `${curr} backlinks vs ${prev} last month — a significant drop. This needs attention.` }
+                  })()
+
+                  // Weekly benchmark results using prorated targets
+                  // Traffic: 10% monthly → 2.33% per 7 days
+                  // Visitor Growth: 40–50% monthly → 9.33–11.67% per 7 days
+                  // CTR: 2–4% (rate — no proration)
+                  const wbTraffic  = calcWeeklyBenchmarks({ traffic: { current: gsc.clicks, previous: gsc.prevClicks }, visitors: { current: 0, previous: 0 }, ctr: { clicks: 0, impressions: 1 } }).trafficGrowth
+                  const wbVisitors = ga4 ? calcWeeklyBenchmarks({ traffic: { current: 0, previous: 0 }, visitors: { current: ga4.users, previous: ga4.prevUsers ?? 0 }, ctr: { clicks: 0, impressions: 1 } }).visitorGrowth : null
+                  const wbCTR      = calcWeeklyBenchmarks({ traffic: { current: 0, previous: 0 }, visitors: { current: 0, previous: 0 }, ctr: { clicks: gsc.clicks, impressions: gsc.impressions } }).ctr
+
+                  const wbToInfo = (wb: ReturnType<typeof calcWeeklyBenchmarks>["trafficGrowth"], targetLabel: string, insight: string): BenchmarkInfo => {
+                    const s = wb.status === "achieved" ? "Excellent" : wb.status === "above_range" ? "Good" : wb.status === "no_data" ? "Average" : "Poor"
+                    const colors: Record<string, { statusColor: string; statusBg: string }> = {
+                      Excellent: { statusColor: "#15803d", statusBg: "#dcfce7" },
+                      Good:      { statusColor: "#0369a1", statusBg: "#dbeafe" },
+                      Average:   { statusColor: "#c2410c", statusBg: "#ffedd5" },
+                      Poor:      { statusColor: "#b91c1c", statusBg: "#fee2e2" },
+                    }
+                    return { bench: targetLabel, status: s as BenchmarkInfo["status"], ...colors[s], insight }
+                  }
+
+                  const trafficGrowthPct = gsc.prevClicks > 0 ? pct(gsc.clicks, gsc.prevClicks) : null
+                  const visitorGrowthPct = ga4 && (ga4.prevUsers ?? 0) > 0 ? pct(ga4.users, ga4.prevUsers ?? 0) : null
+
                   const benchRows: { label: string; yours: string; target: string; info: BenchmarkInfo }[] = [
-                    { label: "Click Rate",           yours: `${gsc.ctr.toFixed(2)}%`,        target: "3% – 5%",   info: getKpiBench("ctr",      gsc.ctr) },
-                    { label: "Google Ranking",       yours: gsc.position.toFixed(1),          target: "Top 10",    info: getKpiBench("position", gsc.position) },
-                    { label: "Traffic Growth",        yours: gsc.prevClicks > 0 ? `${pct(gsc.clicks, gsc.prevClicks) > 0 ? "+" : ""}${pct(gsc.clicks, gsc.prevClicks).toFixed(1)}%` : "—", target: "+10% per period", info: getKpiBench("growth", gsc.clicks, gsc.prevClicks) },
+                    {
+                      label: "Click Rate", yours: `${gsc.ctr.toFixed(2)}%`, target: "2% – 4%",
+                      info: wbToInfo(wbCTR, "2%–4%",
+                        wbCTR.status === "achieved"    ? `CTR of ${gsc.ctr.toFixed(2)}% is within the 2%–4% target range.`
+                        : wbCTR.status === "above_range" ? `CTR of ${gsc.ctr.toFixed(2)}% is above the 4% target — strong click appeal.`
+                        : `CTR of ${gsc.ctr.toFixed(2)}% is below the 2% target. Stronger page titles would help.`),
+                    },
+                    { label: "Google Ranking", yours: gsc.position.toFixed(1), target: "Top 10", info: getKpiBench("position", gsc.position) },
+                    {
+                      label: "Traffic Growth", target: "≥ 2.33% / 7 days",
+                      yours: trafficGrowthPct !== null ? `${trafficGrowthPct > 0 ? "+" : ""}${trafficGrowthPct.toFixed(1)}%` : "—",
+                      info: wbToInfo(wbTraffic, "≥2.33%/7d",
+                        wbTraffic.status === "achieved"    ? `Traffic grew ${trafficGrowthPct?.toFixed(1)}% — on track with the 2.33% weekly target (10% monthly).`
+                        : wbTraffic.status === "no_data"    ? "No previous period data to compare."
+                        : `Traffic ${trafficGrowthPct !== null && trafficGrowthPct < 0 ? `dropped ${Math.abs(trafficGrowthPct).toFixed(1)}%` : `grew only ${trafficGrowthPct?.toFixed(1)}%`} — below the 2.33% weekly target.`),
+                    },
+                    ...(ga4 && wbVisitors ? [{
+                      label: "Visitor Growth", target: "9.33%–11.67% / 7 days",
+                      yours: visitorGrowthPct !== null ? `${visitorGrowthPct > 0 ? "+" : ""}${visitorGrowthPct.toFixed(1)}%` : "—",
+                      info: wbToInfo(wbVisitors, "9.33–11.67%/7d",
+                        wbVisitors.status === "achieved"    ? `Visitor growth of ${visitorGrowthPct?.toFixed(1)}% is within the weekly target range.`
+                        : wbVisitors.status === "above_range" ? `Visitor growth of ${visitorGrowthPct?.toFixed(1)}% is above the 11.67% upper bound — excellent.`
+                        : wbVisitors.status === "no_data"    ? "No previous period visitor data to compare."
+                        : `Visitor growth of ${visitorGrowthPct?.toFixed(1)}% is below the 9.33% weekly minimum target.`),
+                    }] : []),
                     ...(ga4 ? [{ label: "Visitor Engagement", yours: `${ga4.engagementRate.toFixed(1)}%`, target: "55%+", info: getKpiBench("engagement", ga4.engagementRate) }] : []),
+                    { label: "Backlinks Built", yours: backlinks?.current !== null && backlinks?.current !== undefined ? `${backlinks.current}` : "—", target: "↑ Month over month", info: blBenchInfo },
                   ]
                   const statusDot: Record<string, string> = { Excellent: "#16a34a", Good: "#0369a1", Average: "#c2410c", Poor: "#b91c1c" }
                   const statusIcon: Record<string, string> = { Excellent: "✦", Good: "✓", Average: "~", Poor: "!" }
