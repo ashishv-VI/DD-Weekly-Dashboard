@@ -77,35 +77,43 @@ export default function ClientLeadsPage() {
     )
   }, [leads, search])
 
-  async function deleteLead(id: string) {
-    const confirmed = window.confirm(
-      "Are you sure you want to delete this lead?",
-    )
+  async function loadLeads() {
+  setLoading(true)
+  setError("")
 
-    if (!confirmed) {
-      return
-    }
-
-    const response = await fetch(
-      `/api/client/leads/${id}`,
-      {
-        method: "DELETE",
-      },
-    )
+  try {
+    const response = await fetch("/api/client/leads", {
+      cache: "no-store",
+    })
 
     const result = await response.json()
 
+    console.log("Response status:", response.status)
+    console.log("Lead API data:", result)
+
     if (!response.ok) {
-      window.alert(
-        result.error ?? "Unable to delete lead.",
+      throw new Error(
+        result.error ?? "Unable to load leads.",
       )
-      return
     }
 
-    setLeads((current) =>
-      current.filter((lead) => lead.id !== id),
+    setLeads(
+      Array.isArray(result)
+        ? result
+        : result.leads ?? [],
     )
+  } catch (error) {
+    console.error("Load leads error:", error)
+
+    setError(
+      error instanceof Error
+        ? error.message
+        : "Unable to load leads.",
+    )
+  } finally {
+    setLoading(false)
   }
+}
 
   return (
     <main className="min-h-screen bg-slate-50 p-4 sm:p-6">
