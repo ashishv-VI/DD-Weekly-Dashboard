@@ -1663,6 +1663,8 @@ export default function ClientDashboard() {
   const brand = client.themeColor || "#2563eb"
   const brandText = client.textOnTheme || "#ffffff"
 
+  console.log(client);
+  
   return (
     <div className="min-h-screen bg-slate-50" style={{ "--brand": brand, "--brand-text": brandText } as React.CSSProperties}>
       <style>{`
@@ -1736,6 +1738,7 @@ export default function ClientDashboard() {
               </button>
             ))}
             
+
             {client.leadsEnabled && (
               <button
                 type="button"
