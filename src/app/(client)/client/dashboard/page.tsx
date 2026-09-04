@@ -6,7 +6,7 @@ import { calcWeeklyBenchmarks } from "@/lib/benchmarks"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface ClientInfo { id: string; name: string; domain: string; username: string; ga4PropertyId: string | null; gscSiteUrl: string | null; logoUrl?: string; themeColor?: string; textOnTheme?: string }
+interface ClientInfo { id: string; name: string; domain: string; username: string; ga4PropertyId: string | null; gscSiteUrl: string | null; logoUrl?: string; themeColor?: string; textOnTheme?: string; leadsEnabled: boolean }
 interface GSCTotals { clicks: number; impressions: number; ctr: number; position: number; prevClicks: number; prevImpressions: number; prevCtr: number; prevPosition: number }
 interface GA4Totals { sessions: number; users: number; newUsers: number; returningUsers: number; engagedSessions: number; engagementRate: number; conversions: number; revenue: number; avgSessionDuration: number; screenPageViewsPerSession: number; prevSessions: number; prevUsers: number; prevConversions: number }
 interface DailyRow { date: string; clicks?: number; sessions?: number }
@@ -1735,6 +1735,20 @@ export default function ClientDashboard() {
                 )}
               </button>
             ))}
+            
+            {client.leadsEnabled && (
+              <button
+                type="button"
+                onClick={() => router.push("/client/leads")}
+                className="rounded-lg px-3 py-1.5 text-xs font-semibold"
+                style={{
+                  background: brand,
+                  color: brandText,
+                }}
+              >
+                Leads
+              </button>
+            )}
           </div>
         </div>
       </div>
