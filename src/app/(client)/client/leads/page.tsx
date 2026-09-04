@@ -36,6 +36,8 @@ export default function ClientLeadsPage() {
         )
       }
 
+      console.log(response);
+      
       setLeads(result.leads)
     } catch (err) {
       setError(
