@@ -1,186 +1,449 @@
 import { and, eq } from "drizzle-orm"
+import { NextResponse } from "next/server"
 
 import { db } from "@/lib/db"
-import { clients, leads } from "@/lib/db/schema"
+import {
+  clients,
+  leads,
+} from "@/lib/db/schema"
 
-function allowedOrigins() {
-  return new Set(
-    (process.env.ALLOWED_LEAD_ORIGINS ?? "")
-      .split(",")
-      .map((origin) => origin.trim())
-      .filter(Boolean),
-  )
-}
+export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
 
-function corsHeaders(origin: string) {
-  return {
-    "Access-Control-Allow-Origin": origin,
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
-    Vary: "Origin",
-  }
-}
+type RequestBody = Record<string, unknown>
 
 function textValue(
   value: unknown,
   maxLength: number,
-) {
-  return typeof value === "string"
-    ? value.trim().slice(0, maxLength)
-    : ""
-}
-
-export async function OPTIONS(request: Request) {
-  const origin = request.headers.get("origin") ?? ""
-
-  if (!allowedOrigins().has(origin)) {
-    return new Response(null, { status: 403 })
+): string {
+  if (typeof value !== "string") {
+    return ""
   }
 
-  return new Response(null, {
-    status: 204,
-    headers: corsHeaders(origin),
-  })
+  return value.trim().slice(0, maxLength)
 }
 
-export async function POST(request: Request) {
-  const origin = request.headers.get("origin") ?? ""
+function normalizeOrigin(origin: string): string {
+  return origin.trim().replace(/\/+$/, "")
+}
 
-  if (!allowedOrigins().has(origin)) {
-    return Response.json(
-      { error: "Origin not allowed" },
+function getAllowedOrigins(): Set<string> {
+  const configuredOrigins =
+    process.env.ALLOWED_LEAD_ORIGINS ??
+    process.env.ALLOWED_ORIGINS ??
+    ""
+
+  return new Set(
+    configuredOrigins
+      .split(",")
+      .map(normalizeOrigin)
+      .filter(Boolean),
+  )
+}
+
+function getCorsHeaders(origin: string) {
+  return {
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Methods":
+      "POST, OPTIONS",
+    "Access-Control-Allow-Headers":
+      "Content-Type",
+    "Access-Control-Max-Age": "86400",
+    Vary: "Origin",
+  }
+}
+
+function parseParkingSpaces(
+  value: unknown,
+): number | null {
+  if (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= 0
+  ) {
+    return value
+  }
+
+  if (typeof value !== "string") {
+    return null
+  }
+
+  // Allows values such as "100", "1,000" or "100+".
+  const cleaned = value
+    .trim()
+    .replace(/,/g, "")
+
+  const match = cleaned.match(/\d+/)
+
+  if (!match) {
+    return null
+  }
+
+  const parsedValue = Number.parseInt(
+    match[0],
+    10,
+  )
+
+  return Number.isInteger(parsedValue) &&
+    parsedValue >= 0
+    ? parsedValue
+    : null
+}
+
+function parseShuttleValue(
+  value: unknown,
+): boolean | null {
+  if (value === true || value === false) {
+    return value
+  }
+
+  if (typeof value !== "string") {
+    return null
+  }
+
+  const normalizedValue = value
+    .trim()
+    .toLowerCase()
+
+  if (
+    normalizedValue === "yes" ||
+    normalizedValue === "true"
+  ) {
+    return true
+  }
+
+  if (
+    normalizedValue === "no" ||
+    normalizedValue === "false"
+  ) {
+    return false
+  }
+
+  return null
+}
+
+function parseParkingRate(
+  value: unknown,
+): string | null {
+  if (
+    typeof value !== "string" &&
+    typeof value !== "number"
+  ) {
+    return null
+  }
+
+  const cleaned = String(value)
+    .trim()
+    .replace(/[$,\s]/g, "")
+
+  if (!cleaned) {
+    return null
+  }
+
+  // Allows values such as 20, 20.5 and 20.50.
+  if (!/^\d+(\.\d{1,2})?$/.test(cleaned)) {
+    return null
+  }
+
+  return cleaned
+}
+
+export function OPTIONS(request: Request) {
+  const origin = normalizeOrigin(
+    request.headers.get("origin") ?? "",
+  )
+
+  const allowedOrigins = getAllowedOrigins()
+
+  if (
+    !origin ||
+    !allowedOrigins.has(origin)
+  ) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Origin not allowed",
+      },
       { status: 403 },
     )
   }
 
-  let body: Record<string, unknown>
+  return new NextResponse(null, {
+    status: 204,
+    headers: getCorsHeaders(origin),
+  })
+}
+
+export async function POST(request: Request) {
+  const origin = normalizeOrigin(
+    request.headers.get("origin") ?? "",
+  )
+
+  const allowedOrigins = getAllowedOrigins()
+
+  if (
+    !origin ||
+    !allowedOrigins.has(origin)
+  ) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Origin not allowed",
+      },
+      { status: 403 },
+    )
+  }
+
+  const corsHeaders = getCorsHeaders(origin)
 
   try {
-    body = await request.json()
-  } catch {
-    return Response.json(
-      { error: "Invalid JSON request" },
+    let body: RequestBody
+
+    try {
+      body = (await request.json()) as RequestBody
+    } catch {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Invalid JSON request",
+        },
+        {
+          status: 400,
+          headers: corsHeaders,
+        },
+      )
+    }
+
+    const clientSlug = textValue(
+      body.clientSlug,
+      100,
+    ).toLowerCase()
+
+    const firstName = textValue(
+      body.firstName,
+      100,
+    )
+
+    const lastName = textValue(
+      body.lastName,
+      100,
+    )
+
+    const email = textValue(
+      body.email,
+      255,
+    ).toLowerCase()
+
+    if (!clientSlug) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Client slug is required",
+        },
+        {
+          status: 400,
+          headers: corsHeaders,
+        },
+      )
+    }
+
+    if (!firstName || !lastName || !email) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "First name, last name and email are required",
+        },
+        {
+          status: 400,
+          headers: corsHeaders,
+        },
+      )
+    }
+
+    const validEmail =
+      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+        email,
+      )
+
+    if (!validEmail) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Please provide a valid email address",
+        },
+        {
+          status: 400,
+          headers: corsHeaders,
+        },
+      )
+    }
+
+    /*
+     * Find the client using clientSlug.
+     * For the KodaCars form, clientSlug must be
+     * "kodacars".
+     */
+    const [client] = await db
+      .select({
+        id: clients.id,
+        name: clients.name,
+        slug: clients.slug,
+        status: clients.status,
+        leadsEnabled: clients.leadsEnabled,
+      })
+      .from(clients)
+      .where(
+        and(
+          eq(clients.slug, clientSlug),
+          eq(clients.status, "active"),
+          eq(clients.leadsEnabled, true),
+        ),
+      )
+      .limit(1)
+
+    if (!client) {
+      console.error(
+        "Public lead client not found:",
+        clientSlug,
+      )
+
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Client not found or leads are not enabled",
+        },
+        {
+          status: 404,
+          headers: corsHeaders,
+        },
+      )
+    }
+
+    const phone =
+      textValue(body.phone, 40) || null
+
+    const companyName =
+      textValue(body.companyName, 255) ||
+      null
+
+    const parkingSpaces =
+      parseParkingSpaces(body.parkingSpaces)
+
+    const hasAirportShuttle =
+      parseShuttleValue(
+        body.hasAirportShuttle,
+      )
+
+    const shuttleServiceWork =
+      textValue(
+        body.shuttleServiceWork,
+        500,
+      ) || null
+
+    const averageDailyParkingRate =
+      parseParkingRate(
+        body.averageDailyParkingRate,
+      )
+
+    const sourcePage =
+      textValue(body.sourcePage, 255) ||
+      null
+
+    const sourcePageUrl =
+      textValue(body.sourcePageUrl, 1000) ||
+      null
+
+    const comments =
+      textValue(body.comments, 5000) ||
+      null
+
+    /*
+     * This query actually inserts the lead.
+     * The "await" is required.
+     */
+    const [createdLead] = await db
+      .insert(leads)
+      .values({
+        clientId: client.id,
+        firstName,
+        lastName,
+        email,
+        phone,
+        companyName,
+        parkingSpaces,
+        hasAirportShuttle,
+        shuttleServiceWork,
+        averageDailyParkingRate,
+        status: "new",
+        sourcePage,
+        sourcePageUrl,
+        comments,
+        adminNotes: null,
+      })
+      .returning({
+        id: leads.id,
+        clientId: leads.clientId,
+        firstName: leads.firstName,
+        lastName: leads.lastName,
+        email: leads.email,
+        createdAt: leads.createdAt,
+      })
+
+    if (!createdLead) {
+      console.error(
+        "Database did not return the created lead",
+      )
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Lead was not saved",
+        },
+        {
+          status: 500,
+          headers: corsHeaders,
+        },
+      )
+    }
+
+    console.log(
+      "Created lead:",
+      createdLead,
+    )
+
+    return NextResponse.json(
       {
-        status: 400,
-        headers: corsHeaders(origin),
+        success: true,
+        id: createdLead.id,
+        clientId: createdLead.clientId,
+        lead: createdLead,
+      },
+      {
+        status: 201,
+        headers: {
+          ...corsHeaders,
+          "Cache-Control": "no-store",
+        },
+      },
+    )
+  } catch (error) {
+    console.error(
+      "Public lead API error:",
+      error,
+    )
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Unable to save lead",
+      },
+      {
+        status: 500,
+        headers: corsHeaders,
       },
     )
   }
-
-  const clientSlug = textValue(body.clientSlug, 100)
-  const firstName = textValue(body.firstName, 100)
-  const lastName = textValue(body.lastName, 100)
-  const email = textValue(body.email, 255)
-
-  if (!clientSlug || !firstName || !lastName || !email) {
-    return Response.json(
-      {
-        error:
-          "Client slug, first name, last name and email are required.",
-      },
-      {
-        status: 400,
-        headers: corsHeaders(origin),
-      },
-    )
-  }
-
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return Response.json(
-      { error: "Please provide a valid email." },
-      {
-        status: 400,
-        headers: corsHeaders(origin),
-      },
-    )
-  }
-
-  const [client] = await db
-    .select({
-      id: clients.id,
-    })
-    .from(clients)
-    .where(
-      and(
-        eq(clients.slug, clientSlug),
-        eq(clients.status, "active"),
-        eq(clients.leadsEnabled, true),
-      ),
-    )
-    .limit(1)
-
-  if (!client) {
-    return Response.json(
-      { error: "Client not found" },
-      {
-        status: 404,
-        headers: corsHeaders(origin),
-      },
-    )
-  }
-
-  const parkingSpacesValue =
-    body.parkingSpaces === "" ||
-    body.parkingSpaces === null ||
-    body.parkingSpaces === undefined
-      ? null
-      : Number(body.parkingSpaces)
-
-  const parkingSpaces =
-    parkingSpacesValue !== null &&
-    Number.isInteger(parkingSpacesValue) &&
-    parkingSpacesValue >= 0
-      ? parkingSpacesValue
-      : null
-
-  const hasAirportShuttle =
-    body.hasAirportShuttle === true ||
-    body.hasAirportShuttle === "yes"
-      ? true
-      : body.hasAirportShuttle === false ||
-          body.hasAirportShuttle === "no"
-        ? false
-        : null
-
-  const [createdLead] = await db
-    .insert(leads)
-    .values({
-      clientId: client.id,
-      firstName,
-      lastName,
-      email,
-      phone: textValue(body.phone, 40) || null,
-      companyName:
-        textValue(body.companyName, 255) || null,
-      parkingSpaces,
-      hasAirportShuttle,
-      shuttleServiceWork:
-        textValue(body.shuttleServiceWork, 255) ||
-        null,
-      averageDailyParkingRate:
-        textValue(
-          body.averageDailyParkingRate,
-          30,
-        ).replace(/[$,]/g, "") || null,
-      sourcePage:
-        textValue(body.sourcePage, 255) || null,
-      sourcePageUrl:
-        textValue(body.sourcePageUrl, 1000) ||
-        null,
-      comments:
-        textValue(body.comments, 5000) || null,
-      status: "new",
-    })
-    .returning({ id: leads.id })
-
-  return Response.json(
-    {
-      success: true,
-      leadId: createdLead.id,
-    },
-    {
-      status: 201,
-      headers: corsHeaders(origin),
-    },
-  )
 }
