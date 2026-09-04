@@ -1,14 +1,4 @@
-import {
-  pgTable,
-  pgEnum,
-  text,
-  uuid,
-  timestamp,
-  integer,
-  boolean,
-  numeric,
-  index,
-} from "drizzle-orm/pg-core"
+import {pgTable, pgEnum, text, uuid, timestamp, integer, boolean, numeric, index,} from "drizzle-orm/pg-core"
 
 export const leadStatusEnum = pgEnum("lead_status", [
   "new",
