@@ -19,7 +19,7 @@ export async function GET() {
       id: clients.id, name: clients.name, domain: clients.domain,
       username: clients.username, status: clients.status,
       ga4PropertyId: clients.ga4PropertyId, gscSiteUrl: clients.gscSiteUrl,
-      notes: clients.notes, leadsEnabled: client.leadsEnabled,
+      notes: clients.notes, leadsEnabled: clients.leadsEnabled,
     })
     .from(clients)
     .where(eq(clients.id, payload.sub))
