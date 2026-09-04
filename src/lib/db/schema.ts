@@ -1,4 +1,23 @@
-import { pgTable, text, uuid, timestamp, integer, boolean } from "drizzle-orm/pg-core"
+import {
+  pgTable,
+  pgEnum,
+  text,
+  uuid,
+  timestamp,
+  integer,
+  boolean,
+  numeric,
+  index,
+} from "drizzle-orm/pg-core"
+
+export const leadStatusEnum = pgEnum("lead_status", [
+  "new",
+  "contacted",
+  "qualified",
+  "closed",
+  "lost",
+])
+
 
 export const users = pgTable("users", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -18,6 +37,7 @@ export const clients = pgTable("clients", {
   slug: text("slug").notNull().unique(),
   username: text("username").notNull().unique(),
   pinHash: text("pin_hash").notNull(),
+  leadsEnabled: boolean("leads_enabled").notNull().default(false),
   status: text("status").notNull().default("active"),
   loginAttempts: integer("login_attempts").default(0),
   lockedAt: timestamp("locked_at"),
@@ -31,6 +51,50 @@ export const clients = pgTable("clients", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 })
+
+export const leads = pgTable(
+  "leads",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+
+    clientId: uuid("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+
+    firstName: text("first_name").notNull(),
+    lastName: text("last_name").notNull(),
+    email: text("email").notNull(),
+    phone: text("phone"),
+    companyName: text("company_name"),
+    parkingSpaces: integer("parking_spaces"),
+
+    hasAirportShuttle: boolean("has_airport_shuttle"),
+
+    shuttleServiceWork: text("shuttle_service_work"),
+
+    averageDailyParkingRate: numeric(
+      "average_daily_parking_rate",
+      {
+        precision: 10,
+        scale: 2,
+      },
+    ),
+
+    status: leadStatusEnum("status").notNull().default("new"),
+
+    sourcePage: text("source_page"),
+    sourcePageUrl: text("source_page_url"),
+    comments: text("comments"),
+    adminNotes: text("admin_notes"),
+
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("leads_client_id_idx").on(table.clientId),
+    index("leads_created_at_idx").on(table.createdAt),
+  ],
+)
 
 export const loginAttemptLogs = pgTable("login_attempt_logs", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -65,3 +129,5 @@ export type User = typeof users.$inferSelect
 export type Client = typeof clients.$inferSelect
 export type Report = typeof reports.$inferSelect
 export type Notification = typeof notifications.$inferSelect
+export type Lead = typeof leads.$inferSelect
+export type NewLead = typeof leads.$inferInsert
