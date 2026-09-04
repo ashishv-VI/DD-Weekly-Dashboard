@@ -16,11 +16,15 @@ export async function GET(request: Request) {
     )
   }
 
+  console.log(client.id);
+
   const result = await db
     .select()
     .from(leads)
-    .where(eq(leads.clientId, client.id))
+    .where(eq(1))
     .orderBy(desc(leads.createdAt))
+
+  console.log(result);
 
   return Response.json({ leads: result })
 }
