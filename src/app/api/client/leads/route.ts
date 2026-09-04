@@ -17,14 +17,11 @@ export async function GET(request: Request) {
   }
 
   console.log(client.id);
-
+  
   const result = await db
     .select()
     .from(leads)
-    .where(eq(1))
     .orderBy(desc(leads.createdAt))
-
-  console.log(result);
-
+    console.log(result);
   return Response.json({ leads: result })
 }
