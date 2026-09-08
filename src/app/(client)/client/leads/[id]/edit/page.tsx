@@ -629,7 +629,10 @@ export default function EditLeadPage() {
             <button
               type="submit"
               disabled={saving}
-              className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50" style={{
+  backgroundColor: "rgb(64, 32, 128)",
+  color: "rgb(255, 255, 255)",
+}}
             >
               {saving
                 ? "Saving..."

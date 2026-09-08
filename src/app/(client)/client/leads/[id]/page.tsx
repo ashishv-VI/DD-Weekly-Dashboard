@@ -152,7 +152,10 @@ export default function ViewLeadPage() {
 
             <Link
               href={`/client/leads/${lead.id}/edit`}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white"
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white" style={{
+  backgroundColor: "rgb(64, 32, 128)",
+  color: "rgb(255, 255, 255)",
+}}
             >
               Edit Lead
             </Link>
