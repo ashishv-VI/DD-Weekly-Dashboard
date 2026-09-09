@@ -5,12 +5,19 @@ import { authOptions } from "@/auth"
 import { db } from "@/lib/db"
 import { clients, keywordRankings } from "@/lib/db/schema"
 import { eq, and } from "drizzle-orm"
-import { fetchSheetRankings, extractGsheetConfig, currentMonth } from "@/lib/gsheet-rankings"
+import {
+  fetchSheetRankings,
+  fetchAllMonthRankings,
+  extractGsheetConfig,
+  currentMonth,
+} from "@/lib/gsheet-rankings"
 
 /**
  * POST /api/admin/clients/[id]/sync-keyword-rankings
- * Manually trigger a Google Sheets sync for a single client.
- * Optional body: { month: "YYYY-MM" } — defaults to current month.
+ *
+ * Body options:
+ *   { month: "YYYY-MM" }          → sync single month (uses currentRank column)
+ *   { syncAll: true }             → detect ALL month columns, sync every one
  */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
@@ -18,7 +25,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const { id } = await params
 
-  const [client] = await db.select({ id: clients.id, name: clients.name, notes: clients.notes })
+  const [client] = await db
+    .select({ id: clients.id, name: clients.name, notes: clients.notes })
     .from(clients)
     .where(eq(clients.id, id))
     .limit(1)
@@ -32,20 +40,57 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }, { status: 400 })
   }
 
-  let month: string
-  try {
-    const body = await req.json().catch(() => ({}))
-    month = (body.month && /^\d{4}-\d{2}$/.test(body.month)) ? body.month : currentMonth()
-  } catch {
-    month = currentMonth()
+  const body = await req.json().catch(() => ({}))
+
+  // ── Sync All Months ────────────────────────────────────────────────────────
+  if (body.syncAll) {
+    const { months, error } = await fetchAllMonthRankings(
+      cfg.gsheetUrl,
+      cfg.gsheetTab,
+      cfg.mapping.keyword,
+    )
+
+    if (error) return NextResponse.json({ error }, { status: 400 })
+    if (!months.length) return NextResponse.json({ error: "No month columns detected in sheet" }, { status: 400 })
+
+    const now = new Date()
+    const results: { month: string; label: string; saved: number }[] = []
+
+    for (const { month, label, rows } of months) {
+      if (!rows.length) continue
+      // Delete existing rows for this client + month, then re-insert (idempotent)
+      await db.delete(keywordRankings).where(
+        and(eq(keywordRankings.clientId, id), eq(keywordRankings.month, month))
+      )
+      await db.insert(keywordRankings).values(
+        rows.map(r => ({
+          clientId: id,
+          keyword: r.keyword,
+          position: r.position,
+          month,
+          recordedAt: now,
+        }))
+      )
+      results.push({ month, label, saved: rows.length })
+    }
+
+    return NextResponse.json({
+      success: true,
+      syncAll: true,
+      monthsSynced: results.length,
+      results,
+    })
   }
+
+  // ── Single Month Sync ──────────────────────────────────────────────────────
+  const month =
+    body.month && /^\d{4}-\d{2}$/.test(body.month) ? body.month : currentMonth()
 
   const { rows, error } = await fetchSheetRankings(cfg.gsheetUrl, cfg.gsheetTab, cfg.mapping)
 
   if (error) return NextResponse.json({ error }, { status: 400 })
-  if (rows.length === 0) return NextResponse.json({ error: "Sheet returned no keyword rows" }, { status: 400 })
+  if (!rows.length) return NextResponse.json({ error: "Sheet returned no keyword rows" }, { status: 400 })
 
-  // Wipe + re-insert (idempotent)
   await db.delete(keywordRankings).where(
     and(eq(keywordRankings.clientId, id), eq(keywordRankings.month, month))
   )

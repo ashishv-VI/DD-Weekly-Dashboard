@@ -163,6 +163,7 @@ function KeywordRankingsHistoryCard({ clientId }: { clientId: string }) {
   const [monthDetail, setMonthDetail] = useState<Record<string, { keyword: string; position: number | null }[]>>({})
   const [deleting, setDeleting] = useState<string | null>(null)
   const [syncing, setSyncing] = useState(false)
+  const [syncingAll, setSyncingAll] = useState(false)
   const [syncMonth, setSyncMonth] = useState(defaultMonth)
 
   const monthLabel = (m: string) => {
@@ -259,6 +260,24 @@ function KeywordRankingsHistoryCard({ clientId }: { clientId: string }) {
     } finally { setSyncing(false) }
   }
 
+  const handleSyncAll = async () => {
+    setSyncingAll(true); setStatus(null)
+    try {
+      const res = await fetch(`/api/admin/clients/${clientId}/sync-keyword-rankings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ syncAll: true }),
+      })
+      const d = await res.json()
+      if (!res.ok) throw new Error(d.error ?? "Sync failed")
+      const labels = (d.results as { label: string; saved: number }[]).map(r => `${r.label} (${r.saved})`).join(", ")
+      setStatus({ type: "ok", msg: `Synced ${d.monthsSynced} months: ${labels}` })
+      loadHistory()
+    } catch (e) {
+      setStatus({ type: "err", msg: e instanceof Error ? e.message : "Sync all failed" })
+    } finally { setSyncingAll(false) }
+  }
+
   return (
     <div className="border border-gray-200 rounded-xl p-4 space-y-4">
       <div className="flex items-start justify-between">
@@ -282,24 +301,39 @@ function KeywordRankingsHistoryCard({ clientId }: { clientId: string }) {
           <div>
             <div className="text-xs font-semibold text-emerald-800">Auto-sync from Google Sheet</div>
             <div className="text-xs text-emerald-600 mt-0.5">
-              Uses the Google Sheet you set up in &ldquo;Keyword Rankings&rdquo; above. Runs automatically on the 1st of every month.
-              Click &ldquo;Sync Now&rdquo; to pull data immediately.
+              Uses the Google Sheet you set up in &ldquo;Keyword Rankings&rdquo; above. Columns like Jun&apos;26, Jul&apos;26, Aug&apos;26 are detected automatically.
             </div>
           </div>
         </div>
-        <div className="flex gap-2 items-end flex-wrap">
-          <div className="min-w-[140px] flex-1">
-            <label className="block text-xs font-semibold text-emerald-700 mb-1">Save as month</label>
-            <input type="month" className="w-full border border-emerald-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
-              value={syncMonth} onChange={e => setSyncMonth(e.target.value)} />
+
+        {/* Sync All — primary action */}
+        <button type="button" onClick={handleSyncAll} disabled={syncingAll || syncing}
+          className="w-full bg-emerald-600 text-white px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-emerald-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
+          {syncingAll
+            ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" /> Syncing all months…</>
+            : "⚡ Sync All Months from Sheet"}
+        </button>
+        <p className="text-xs text-emerald-600 text-center">
+          Reads every month column (Jun&apos;26, Jul&apos;26, Aug&apos;26, Sep&apos;26…) and saves all history in one click
+        </p>
+
+        {/* Sync single month — secondary */}
+        <div className="border-t border-emerald-200 pt-3">
+          <p className="text-xs text-emerald-700 font-semibold mb-2">Or sync one specific month:</p>
+          <div className="flex gap-2 items-end">
+            <div className="flex-1">
+              <input type="month" className="w-full border border-emerald-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                value={syncMonth} onChange={e => setSyncMonth(e.target.value)} />
+            </div>
+            <button type="button" onClick={handleSync} disabled={syncing || syncingAll}
+              className="bg-white border border-emerald-400 text-emerald-700 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-emerald-50 disabled:opacity-50 transition-colors whitespace-nowrap">
+              {syncing ? "Syncing…" : "🔄 Sync This Month"}
+            </button>
           </div>
-          <button type="button" onClick={handleSync} disabled={syncing}
-            className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 transition-colors whitespace-nowrap">
-            {syncing ? "Syncing…" : "🔄 Sync Now"}
-          </button>
         </div>
+
         <p className="text-xs text-emerald-500">
-          ⚡ Cron schedule: 1st of every month at 06:00 UTC — all clients with a Google Sheet config are synced automatically.
+          ⚡ Auto-runs on 1st of every month at 06:00 UTC for all clients.
         </p>
       </div>
 
