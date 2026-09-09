@@ -758,6 +758,7 @@ export default function ClientDetailPage() {
     industry: "", country: "", assignedTo: "", notes: "", logoUrl: "", themeColor: "", textOnTheme: "",
     rankingConfig: null as RankingConfig | null,
     backlinkMonths: [] as BacklinkMonth[],
+    leadsEnabled: false,
   })
 
   useEffect(() => {
@@ -770,6 +771,7 @@ export default function ClientDetailPage() {
         industry: meta.industry, country: meta.country, assignedTo: meta.assignedTo, notes: meta.notes, logoUrl: meta.logoUrl, themeColor: meta.themeColor, textOnTheme: meta.textOnTheme,
         rankingConfig: meta.rankingConfig,
         backlinkMonths: meta.backlinkMonths,
+        leadsEnabled: !!d.leadsEnabled,
       })
       setLoading(false)
     })
@@ -782,6 +784,7 @@ export default function ClientDetailPage() {
       const body = {
         name: form.name, domain: form.domain, username: form.username, pin: form.pin,
         ga4PropertyId: form.ga4PropertyId, gscSiteUrl: form.gscSiteUrl, status: form.status,
+        leadsEnabled: form.leadsEnabled,
         notes: serializeNotes(form.industry, form.country, form.assignedTo, form.notes, form.logoUrl, form.themeColor, form.textOnTheme, form.rankingConfig, form.backlinkMonths),
       }
       const res = await fetch(`/api/admin/clients/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
@@ -1013,6 +1016,24 @@ export default function ClientDetailPage() {
                 <option value="locked">Locked</option>
               </select>
             </div>
+
+            {/* Leads Enable Toggle */}
+            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
+              <div>
+                <div className="text-sm font-semibold text-gray-800">Enable Leads</div>
+                <div className="text-xs text-gray-500 mt-0.5">Show the Leads tab in the client dashboard so they can view enquiries</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setForm(f => ({ ...f, leadsEnabled: !f.leadsEnabled }))}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 ${form.leadsEnabled ? "bg-blue-600" : "bg-gray-200"}`}
+                role="switch"
+                aria-checked={form.leadsEnabled}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${form.leadsEnabled ? "translate-x-6" : "translate-x-1"}`} />
+              </button>
+            </div>
+
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1.5">Internal Notes</label>
               <textarea className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"

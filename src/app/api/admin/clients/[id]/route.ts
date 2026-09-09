@@ -25,7 +25,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
   const { id } = await params
   const body = await req.json()
-  const { name, domain, username, pin, ga4PropertyId, gscSiteUrl, notes, status } = body
+  const { name, domain, username, pin, ga4PropertyId, gscSiteUrl, notes, status, leadsEnabled } = body
 
   const updates: Record<string, unknown> = { updatedAt: new Date() }
   if (name) updates.name = name
@@ -36,6 +36,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   if (gscSiteUrl !== undefined) updates.gscSiteUrl = gscSiteUrl
   if (notes !== undefined) updates.notes = notes
   if (status) updates.status = status
+  if (leadsEnabled !== undefined) updates.leadsEnabled = leadsEnabled
 
   const [updated] = await db.update(clients).set(updates).where(eq(clients.id, id)).returning()
   return NextResponse.json(updated)
