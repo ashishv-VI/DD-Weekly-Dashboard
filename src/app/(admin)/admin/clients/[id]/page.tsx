@@ -145,6 +145,286 @@ function BacklinksCard({ months, onSave }: { months: BacklinkMonth[]; onSave: (m
 
 const INDUSTRIES = ["Technology", "E-commerce", "Healthcare", "Finance", "Real Estate", "Education", "Travel", "Manufacturing", "Legal", "Retail", "Other"]
 
+// ─── Keyword Rankings History Card ────────────────────────────────────────────
+
+interface KwRow { keyword: string; position: string }
+
+function KeywordRankingsHistoryCard({ clientId }: { clientId: string }) {
+  const now = new Date()
+  const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
+
+  const [month, setMonth] = useState(defaultMonth)
+  const [rows, setRows] = useState<KwRow[]>([{ keyword: "", position: "" }])
+  const [saving, setSaving] = useState(false)
+  const [status, setStatus] = useState<{ type: "ok" | "err"; msg: string } | null>(null)
+  const [history, setHistory] = useState<{ month: string; count: number }[]>([])
+  const [loadingHistory, setLoadingHistory] = useState(true)
+  const [expandedMonth, setExpandedMonth] = useState<string | null>(null)
+  const [monthDetail, setMonthDetail] = useState<Record<string, { keyword: string; position: number | null }[]>>({})
+  const [deleting, setDeleting] = useState<string | null>(null)
+  const [syncing, setSyncing] = useState(false)
+  const [syncMonth, setSyncMonth] = useState(defaultMonth)
+
+  const monthLabel = (m: string) => {
+    const [y, mo] = m.split("-")
+    return new Date(parseInt(y), parseInt(mo) - 1, 1).toLocaleDateString("en-GB", { month: "long", year: "numeric" })
+  }
+
+  const loadHistory = () => {
+    setLoadingHistory(true)
+    fetch(`/api/admin/clients/${clientId}/keyword-rankings`)
+      .then(r => r.json())
+      .then(d => setHistory(Array.isArray(d.months) ? d.months : []))
+      .catch(() => setHistory([]))
+      .finally(() => setLoadingHistory(false))
+  }
+
+  useEffect(() => { loadHistory() }, [clientId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const addRow = () => setRows(r => [...r, { keyword: "", position: "" }])
+  const removeRow = (i: number) => setRows(r => r.filter((_, idx) => idx !== i))
+  const updateRow = (i: number, field: keyof KwRow, val: string) =>
+    setRows(r => r.map((row, idx) => idx === i ? { ...row, [field]: val } : row))
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    e.preventDefault()
+    const text = e.clipboardData.getData("text")
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+    const parsed: KwRow[] = lines.map(line => {
+      const parts = line.split(/\t|,/)
+      return { keyword: (parts[0] ?? "").trim(), position: (parts[1] ?? "").trim() }
+    })
+    if (parsed.length) setRows(parsed)
+  }
+
+  const handleSave = async () => {
+    const valid = rows.filter(r => r.keyword.trim())
+    if (!valid.length) { setStatus({ type: "err", msg: "Add at least one keyword." }); return }
+    setSaving(true); setStatus(null)
+    try {
+      const rankings = valid.map(r => ({
+        keyword: r.keyword.trim(),
+        position: r.position.trim() ? parseInt(r.position, 10) || null : null,
+      }))
+      const res = await fetch(`/api/admin/clients/${clientId}/keyword-rankings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ month, rankings }),
+      })
+      const d = await res.json()
+      if (!res.ok) throw new Error(d.error ?? "Save failed")
+      setStatus({ type: "ok", msg: `Saved ${d.saved} keywords for ${monthLabel(month)}` })
+      setRows([{ keyword: "", position: "" }])
+      loadHistory()
+    } catch (e) {
+      setStatus({ type: "err", msg: e instanceof Error ? e.message : "Save failed" })
+    } finally { setSaving(false) }
+  }
+
+  const handleToggleMonth = async (m: string) => {
+    if (expandedMonth === m) { setExpandedMonth(null); return }
+    setExpandedMonth(m)
+    if (!monthDetail[m]) {
+      const hRow = history.find(h => h.month === m) as any
+      if (hRow?.rows) {
+        setMonthDetail(d => ({ ...d, [m]: hRow.rows.map((r: any) => ({ keyword: r.keyword, position: r.position })) }))
+      }
+    }
+  }
+
+  const handleDelete = async (m: string) => {
+    if (!confirm(`Delete all keyword rankings for ${monthLabel(m)}?`)) return
+    setDeleting(m)
+    try {
+      await fetch(`/api/admin/clients/${clientId}/keyword-rankings?month=${m}`, { method: "DELETE" })
+      setHistory(h => h.filter(r => r.month !== m))
+      if (expandedMonth === m) setExpandedMonth(null)
+    } finally { setDeleting(null) }
+  }
+
+  const handleSync = async () => {
+    setSyncing(true); setStatus(null)
+    try {
+      const res = await fetch(`/api/admin/clients/${clientId}/sync-keyword-rankings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ month: syncMonth }),
+      })
+      const d = await res.json()
+      if (!res.ok) throw new Error(d.error ?? "Sync failed")
+      setStatus({ type: "ok", msg: `Synced ${d.saved} keywords from Google Sheet for ${monthLabel(syncMonth)}` })
+      loadHistory()
+    } catch (e) {
+      setStatus({ type: "err", msg: e instanceof Error ? e.message : "Sync failed" })
+    } finally { setSyncing(false) }
+  }
+
+  return (
+    <div className="border border-gray-200 rounded-xl p-4 space-y-4">
+      <div className="flex items-start justify-between">
+        <div>
+          <div className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+            <span>📈</span> Keyword Ranking History
+          </div>
+          <div className="text-xs text-gray-400 mt-0.5">
+            Save monthly keyword positions to the database. The client dashboard shows month-over-month improvement.
+          </div>
+        </div>
+        <span className="text-[10px] bg-blue-50 text-blue-700 border border-blue-100 px-2 py-0.5 rounded-full font-semibold shrink-0">
+          {history.length} month{history.length !== 1 ? "s" : ""} saved
+        </span>
+      </div>
+
+      {/* ── Option 1: Auto-sync from Google Sheet ── */}
+      <div className="border border-emerald-200 bg-emerald-50 rounded-xl p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <span className="text-base">🔄</span>
+          <div>
+            <div className="text-xs font-semibold text-emerald-800">Auto-sync from Google Sheet</div>
+            <div className="text-xs text-emerald-600 mt-0.5">
+              Uses the Google Sheet you set up in &ldquo;Keyword Rankings&rdquo; above. Runs automatically on the 1st of every month.
+              Click &ldquo;Sync Now&rdquo; to pull data immediately.
+            </div>
+          </div>
+        </div>
+        <div className="flex gap-2 items-end flex-wrap">
+          <div className="min-w-[140px] flex-1">
+            <label className="block text-xs font-semibold text-emerald-700 mb-1">Save as month</label>
+            <input type="month" className="w-full border border-emerald-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+              value={syncMonth} onChange={e => setSyncMonth(e.target.value)} />
+          </div>
+          <button type="button" onClick={handleSync} disabled={syncing}
+            className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 transition-colors whitespace-nowrap">
+            {syncing ? "Syncing…" : "🔄 Sync Now"}
+          </button>
+        </div>
+        <p className="text-xs text-emerald-500">
+          ⚡ Cron schedule: 1st of every month at 06:00 UTC — all clients with a Google Sheet config are synced automatically.
+        </p>
+      </div>
+
+      {/* ── Option 2: Manual entry ── */}
+      <div>
+        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Or enter manually</div>
+
+      {/* Month selector */}
+      <div className="flex gap-2 items-end flex-wrap">
+        <div className="min-w-[160px] flex-1">
+          <label className="block text-xs font-semibold text-gray-600 mb-1">Month</label>
+          <input type="month" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            value={month} onChange={e => setMonth(e.target.value)} />
+        </div>
+      </div>
+      </div>
+
+      {/* Keyword rows */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <label className="text-xs font-semibold text-gray-600">Keywords &amp; Positions</label>
+          <span className="text-xs text-gray-400">Tip: paste a tab/comma-separated list into any field to bulk-import</span>
+        </div>
+
+        <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+          {rows.map((row, i) => (
+            <div key={i} className="flex gap-2 items-center">
+              <textarea
+                rows={1}
+                className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                placeholder="e.g. airport parking chicago"
+                value={row.keyword}
+                onChange={e => updateRow(i, "keyword", e.target.value)}
+                onPaste={i === 0 ? handlePaste : undefined}
+              />
+              <input
+                type="number"
+                min="1"
+                max="1000"
+                className="w-20 border border-gray-200 rounded-lg px-2 py-1.5 text-xs text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Rank"
+                value={row.position}
+                onChange={e => updateRow(i, "position", e.target.value)}
+              />
+              {rows.length > 1 && (
+                <button type="button" onClick={() => removeRow(i)} className="text-gray-300 hover:text-red-500 text-xs transition-colors">✕</button>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <button type="button" onClick={addRow} className="mt-2 text-xs text-blue-600 hover:text-blue-800 font-medium">
+          + Add row
+        </button>
+      </div>
+
+      {status && (
+        <p className={`text-xs px-3 py-2 rounded-lg border ${status.type === "ok" ? "bg-green-50 text-green-700 border-green-200" : "bg-red-50 text-red-600 border-red-200"}`}>
+          {status.msg}
+        </p>
+      )}
+
+      <button type="button" onClick={handleSave} disabled={saving}
+        className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors">
+        {saving ? "Saving…" : `Save Rankings for ${monthLabel(month)}`}
+      </button>
+
+      {/* History */}
+      {loadingHistory ? (
+        <div className="text-xs text-gray-400 text-center py-2">Loading history…</div>
+      ) : history.length > 0 ? (
+        <div className="border border-gray-100 rounded-lg overflow-hidden">
+          <div className="bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">Saved Months</div>
+          {history.map((h, i) => {
+            const isExp = expandedMonth === h.month
+            const detail = monthDetail[h.month]
+            return (
+              <div key={h.month} className={i < history.length - 1 ? "border-b border-gray-100" : ""}>
+                <div className="flex items-center justify-between px-3 py-2.5 text-sm">
+                  <button type="button" onClick={() => handleToggleMonth(h.month)}
+                    className="flex items-center gap-2 text-left hover:text-blue-600 transition-colors">
+                    <span className={`text-gray-400 text-xs transition-transform ${isExp ? "rotate-90" : ""}`}>▶</span>
+                    <span className="font-medium text-gray-700">{monthLabel(h.month)}</span>
+                    <span className="text-xs text-gray-400">{h.count} keyword{h.count !== 1 ? "s" : ""}</span>
+                  </button>
+                  <button type="button" onClick={() => handleDelete(h.month)} disabled={deleting === h.month}
+                    className="text-gray-300 hover:text-red-500 transition-colors text-xs">
+                    {deleting === h.month ? "…" : "✕"}
+                  </button>
+                </div>
+                {isExp && detail && (
+                  <div className="border-t border-gray-50 overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="text-left px-3 py-1.5 text-gray-500 font-medium">Keyword</th>
+                          <th className="text-center px-3 py-1.5 text-gray-500 font-medium w-20">Position</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {detail.map((kw, ki) => (
+                          <tr key={ki} className="border-t border-gray-50">
+                            <td className="px-3 py-1.5 text-gray-700">{kw.keyword}</td>
+                            <td className="px-3 py-1.5 text-center font-mono font-semibold text-blue-700">
+                              {kw.position ?? <span className="text-gray-400">—</span>}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      ) : (
+        <div className="text-xs text-gray-400 text-center py-2 border border-dashed border-gray-200 rounded-lg">
+          No keyword history saved yet — add the first month above
+        </div>
+      )}
+    </div>
+  )
+}
+
 function RankingConfigCard({ config, onSave }: { config: RankingConfig | null; onSave: (cfg: RankingConfig) => void }) {
   const [open, setOpen] = useState(false)
   const [srcType, setSrcType] = useState<"excel" | "gsheet">("excel")
@@ -776,6 +1056,8 @@ export default function ClientDetailPage() {
             <RankingConfigCard config={form.rankingConfig} onSave={(cfg) => setForm(f => ({ ...f, rankingConfig: cfg }))} />
 
             <BacklinksCard months={form.backlinkMonths} onSave={(months) => setForm(f => ({ ...f, backlinkMonths: months }))} />
+
+            <KeywordRankingsHistoryCard clientId={id} />
 
             <div className="flex items-center justify-end pt-2">
               <button type="submit" disabled={saving}

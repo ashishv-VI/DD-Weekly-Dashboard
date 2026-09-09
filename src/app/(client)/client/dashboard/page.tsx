@@ -173,28 +173,30 @@ function calcHealthScore(gsc: GSCTotals | undefined, ga4: Partial<GA4Totals> | u
   let weighted = 0, totalWeight = 0
 
   if (gsc && gsc.impressions > 0) {
-    // CTR vs industry avg (2-5%)
-    const ctrScore = gsc.ctr >= 5 ? 100 : gsc.ctr >= 3 ? 75 : gsc.ctr >= 2 ? 55 : gsc.ctr >= 1 ? 35 : 15
+    // CTR scoring — smoother gradient, 0.5–2% is Average not Poor
+    const ctrScore = gsc.ctr >= 5 ? 100 : gsc.ctr >= 3 ? 75 : gsc.ctr >= 2 ? 55 : gsc.ctr >= 0.5 ? 40 : 15
     comps.push({ label: "Click-Through Rate", value: gsc.ctr, score: ctrScore })
     weighted += ctrScore * 25; totalWeight += 25
 
-    // Position score
-    const posScore = gsc.position <= 3 ? 100 : gsc.position <= 5 ? 85 : gsc.position <= 10 ? 68 : gsc.position <= 20 ? 40 : 15
+    // Position scoring — graduated, no cliff edge at 20
+    // ≤3=100, ≤5=85, ≤10=68, ≤20=45, ≤30=30, ≤50=20, >50=12
+    const posScore = gsc.position <= 3 ? 100 : gsc.position <= 5 ? 85 : gsc.position <= 10 ? 68 : gsc.position <= 20 ? 45 : gsc.position <= 30 ? 30 : gsc.position <= 50 ? 20 : 12
     comps.push({ label: "Average Position", value: gsc.position, score: posScore })
     weighted += posScore * 25; totalWeight += 25
 
-    // Traffic growth
+    // Traffic growth — weight reduced 20→10 (volatile, outside agency control short-term)
     const growth = gsc.prevClicks > 0 ? ((gsc.clicks - gsc.prevClicks) / gsc.prevClicks) * 100 : 0
     const growthScore = growth > 30 ? 100 : growth > 10 ? 80 : growth > 0 ? 65 : growth > -10 ? 45 : growth > -30 ? 25 : 10
     comps.push({ label: "Traffic Growth", value: growth, score: growthScore })
-    weighted += growthScore * 20; totalWeight += 20
+    weighted += growthScore * 10; totalWeight += 10
   }
 
   if (ga4) {
+    // Engagement weight raised 20→25 (agency can directly influence this)
     const eng = ga4.engagementRate ?? 0
     const engScore = eng >= 70 ? 100 : eng >= 55 ? 80 : eng >= 40 ? 60 : eng >= 25 ? 40 : 20
     comps.push({ label: "Engagement Rate", value: eng, score: engScore })
-    weighted += engScore * 20; totalWeight += 20
+    weighted += engScore * 25; totalWeight += 25
   }
 
   const aiScore = (aiTraffic && aiTraffic.total > 0) ? 80 : 20
@@ -1334,6 +1336,9 @@ export default function ClientDashboard() {
   const [rankDir, setRankDir] = useState<"asc" | "desc">("asc")
   const [rankFilter, setRankFilter] = useState<"all" | "top3" | "top10" | "top20" | "improved" | "declined" | "quickwin">("all")
   const [trafficPeriod, setTrafficPeriod] = useState<"7D" | "30D" | "90D">("30D")
+  // Keyword ranking history (from database)
+  const [kwHistory, setKwHistory] = useState<{ keywords: string[]; months: string[]; data: Record<string, Record<string, number | null>> } | null>(null)
+  const [kwHistoryLoading, setKwHistoryLoading] = useState(false)
 
   useEffect(() => {
     fetch("/api/client/me").then(r => { if (!r.ok) { router.push("/client/login"); return null }; return r.json() })
@@ -1544,6 +1549,16 @@ export default function ClientDashboard() {
       .finally(() => setRankingsLoading(false))
   }
 
+  const loadKwHistory = () => {
+    if (kwHistory || kwHistoryLoading) return
+    setKwHistoryLoading(true)
+    fetch("/api/client/keyword-rankings")
+      .then(r => r.json())
+      .then(d => setKwHistory({ keywords: d.keywords ?? [], months: d.months ?? [], data: d.data ?? {} }))
+      .catch(() => setKwHistory({ keywords: [], months: [], data: {} }))
+      .finally(() => setKwHistoryLoading(false))
+  }
+
   const brandName = useMemo(() => {
     if (!client) return ""
     return client.domain.replace(/^https?:\/\//, "").replace(/^www\./, "").split(".")[0]
@@ -1723,7 +1738,7 @@ export default function ClientDashboard() {
           <div className="flex gap-1 py-2 overflow-x-auto" style={{ scrollbarWidth: "none" } as React.CSSProperties}>
             {tabs.map(t => (
               <button key={t.key} title={t.tooltip}
-                onClick={() => { setActiveTab(t.key); if (t.key === "health") loadPagespeed(); if (t.key === "rankings") loadRankings() }}
+                onClick={() => { setActiveTab(t.key); if (t.key === "health") loadPagespeed(); if (t.key === "rankings") { loadRankings(); loadKwHistory() } }}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all shrink-0 focus:outline-none ${
                   activeTab !== t.key ? "text-slate-500 hover:text-slate-800 hover:bg-slate-100" : "shadow-sm"
                 }`}
@@ -3104,6 +3119,142 @@ export default function ClientDashboard() {
             {/* ══════════════════════════════ RANKINGS ══════════════════════════════ */}
             {activeTab === "rankings" && (
               <div className="space-y-5 anim-card">
+
+                {/* ── Keyword Ranking History (database) — always visible ── */}
+                {kwHistoryLoading ? (
+                  <div className="bg-white rounded-xl border border-slate-200 px-5 py-8 flex items-center justify-center gap-3">
+                    <div className="w-5 h-5 border-2 border-slate-200 border-t-blue-600 rounded-full animate-spin shrink-0" />
+                    <span className="text-sm text-slate-400">Loading ranking history…</span>
+                  </div>
+                ) : kwHistory && kwHistory.months.length > 0 ? (() => {
+                  const { keywords, months, data } = kwHistory
+                  const kwMonthLabel = (m: string) => {
+                    const [y, mo] = m.split("-")
+                    return new Date(parseInt(y), parseInt(mo) - 1, 1).toLocaleDateString("en-GB", { month: "short", year: "numeric" })
+                  }
+                  const kwPosColor = (pos: number | null | undefined): string => {
+                    if (pos === null || pos === undefined) return "text-slate-300"
+                    if (pos <= 3) return "text-green-700"
+                    if (pos <= 10) return "text-blue-700"
+                    if (pos <= 20) return "text-amber-700"
+                    return "text-slate-500"
+                  }
+                  const kwPosBg = (pos: number | null | undefined): string => {
+                    if (pos === null || pos === undefined) return ""
+                    if (pos <= 3) return "bg-green-50"
+                    if (pos <= 10) return "bg-blue-50"
+                    if (pos <= 20) return "bg-amber-50"
+                    return ""
+                  }
+                  const kwGetDelta = (kw: string): number | null => {
+                    if (months.length < 2) return null
+                    const curr = data[kw]?.[months[0]] ?? null
+                    const prev = data[kw]?.[months[1]] ?? null
+                    if (curr === null || prev === null) return null
+                    return curr - prev // negative = moved up = good
+                  }
+                  // Summary stats
+                  const improved = keywords.filter(kw => { const d = kwGetDelta(kw); return d !== null && d < 0 }).length
+                  const declined = keywords.filter(kw => { const d = kwGetDelta(kw); return d !== null && d > 0 }).length
+                  const top10Count = months.length > 0
+                    ? keywords.filter(kw => { const p = data[kw]?.[months[0]] ?? null; return p !== null && p <= 10 }).length
+                    : 0
+
+                  return (
+                    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                      {/* Header */}
+                      <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between flex-wrap gap-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <div className="text-sm font-semibold text-slate-900">Keyword Ranking History</div>
+                            <span className="text-xs bg-blue-50 text-blue-700 border border-blue-100 px-2 py-0.5 rounded-full font-semibold">
+                              {months.length} month{months.length !== 1 ? "s" : ""}
+                            </span>
+                          </div>
+                          <div className="text-xs text-slate-400 mt-0.5">{keywords.length} keywords tracked — updated automatically each month</div>
+                        </div>
+                        {/* Mini stats */}
+                        <div className="flex items-center gap-4">
+                          <div className="text-center">
+                            <div className="text-base font-bold text-blue-700">{top10Count}</div>
+                            <div className="text-xs text-slate-400">Top 10</div>
+                          </div>
+                          {months.length >= 2 && <>
+                            <div className="text-center">
+                              <div className="text-base font-bold text-green-600">{improved}</div>
+                              <div className="text-xs text-slate-400">Improved</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-base font-bold text-red-500">{declined}</div>
+                              <div className="text-xs text-slate-400">Declined</div>
+                            </div>
+                          </>}
+                          <div className="flex items-center gap-2 text-xs text-slate-400 border-l border-slate-100 pl-4">
+                            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" /> Top 3</span>
+                            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500 inline-block" /> Top 10</span>
+                            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500 inline-block" /> Top 20</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Table */}
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead className="bg-slate-50 border-b border-slate-100">
+                            <tr>
+                              <th className="text-left px-4 py-3 font-semibold text-slate-600 min-w-[200px] sticky left-0 bg-slate-50 z-10 border-r border-slate-100">Keyword</th>
+                              {months.map(m => (
+                                <th key={m} className="text-center px-3 py-3 font-semibold text-slate-600 whitespace-nowrap min-w-[80px]">{kwMonthLabel(m)}</th>
+                              ))}
+                              {months.length >= 2 && <th className="text-center px-3 py-3 font-semibold text-slate-500 whitespace-nowrap min-w-[72px] bg-slate-100/60">Change</th>}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {keywords.map((kw, ki) => {
+                              const delta = kwGetDelta(kw)
+                              return (
+                                <tr key={kw} className={`border-t border-slate-50 hover:bg-slate-50/70 transition-colors ${ki % 2 === 1 ? "bg-slate-50/30" : ""}`}>
+                                  <td className="px-4 py-2.5 font-medium text-slate-800 sticky left-0 bg-inherit z-10 max-w-[220px] truncate border-r border-slate-100" title={kw}>{kw}</td>
+                                  {months.map(m => {
+                                    const pos = data[kw]?.[m] ?? null
+                                    return (
+                                      <td key={m} className={`px-3 py-2.5 text-center tabular-nums font-bold ${kwPosBg(pos)} ${kwPosColor(pos)}`}>
+                                        {pos !== null ? `#${pos}` : <span className="text-slate-300 font-normal">—</span>}
+                                      </td>
+                                    )
+                                  })}
+                                  {months.length >= 2 && (
+                                    <td className="px-3 py-2.5 text-center tabular-nums font-semibold bg-slate-50/60">
+                                      {delta === null ? (
+                                        <span className="text-slate-300">—</span>
+                                      ) : delta < 0 ? (
+                                        <span className="text-green-600 font-bold">↑ {Math.abs(delta)}</span>
+                                      ) : delta > 0 ? (
+                                        <span className="text-red-500 font-bold">↓ {delta}</span>
+                                      ) : (
+                                        <span className="text-slate-400">→ 0</span>
+                                      )}
+                                    </td>
+                                  )}
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Footer */}
+                      <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+                        <p className="text-xs text-slate-400">
+                          ↑ = position improved (moved higher in Google) &nbsp;·&nbsp; ↓ = position declined &nbsp;·&nbsp; # = Google ranking position
+                        </p>
+                        <p className="text-xs text-slate-300">Updated monthly by Damco Digital</p>
+                      </div>
+                    </div>
+                  )
+                })() : null}
+
+                {/* ── Live Rankings (Excel / Sheets import) ── */}
                 {rankingsLoading ? (
                   <div className="flex items-center justify-center py-16">
                     <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: `${brand} transparent transparent transparent` }} />

@@ -1,4 +1,4 @@
-import { pgTable, text, uuid, timestamp, integer, boolean } from "drizzle-orm/pg-core"
+import { pgTable, text, uuid, timestamp, integer, boolean, numeric, pgEnum } from "drizzle-orm/pg-core"
 
 export const users = pgTable("users", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -27,6 +27,7 @@ export const clients = pgTable("clients", {
   googleRefreshToken: text("google_refresh_token"),
   tokenExpiry: timestamp("token_expiry"),
   notes: text("notes"),
+  leadsEnabled: boolean("leads_enabled").notNull().default(false),
   createdBy: uuid("created_by"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -61,7 +62,64 @@ export const notifications = pgTable("notifications", {
   createdAt: timestamp("created_at").defaultNow(),
 })
 
-export type User = typeof users.$inferSelect
-export type Client = typeof clients.$inferSelect
-export type Report = typeof reports.$inferSelect
-export type Notification = typeof notifications.$inferSelect
+// ─── Leads ────────────────────────────────────────────────────────────────────
+
+export const leadStatusEnum = pgEnum("lead_status", [
+  "new",
+  "contacted",
+  "qualified",
+  "closed",
+  "lost",
+])
+
+export const leads = pgTable("leads", {
+  id: uuid("id").defaultRandom().primaryKey(),
+
+  clientId: uuid("client_id")
+    .notNull()
+    .references(() => clients.id, { onDelete: "cascade" }),
+
+  firstName:              text("first_name").notNull(),
+  lastName:               text("last_name").notNull(),
+  email:                  text("email").notNull(),
+  phone:                  text("phone"),
+  companyName:            text("company_name"),
+  parkingSpaces:          integer("parking_spaces"),
+
+  hasAirportShuttle:      boolean("has_airport_shuttle"),
+  shuttleServiceWork:     text("shuttle_service_work"),
+  averageDailyParkingRate: numeric("average_daily_parking_rate", { precision: 10, scale: 2 }),
+
+  status:                 leadStatusEnum("status").notNull().default("new"),
+
+  sourcePage:             text("source_page"),
+  sourcePageUrl:          text("source_page_url"),
+  comments:               text("comments"),
+  adminNotes:             text("admin_notes"),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+})
+
+// ─── Keyword Rankings History ─────────────────────────────────────────────────
+
+export const keywordRankings = pgTable("keyword_rankings", {
+  id:         uuid("id").defaultRandom().primaryKey(),
+  clientId:   uuid("client_id").notNull().references(() => clients.id, { onDelete: "cascade" }),
+  keyword:    text("keyword").notNull(),
+  /** Rank position — null means not ranking / dropped off */
+  position:   integer("position"),
+  /** Month in "YYYY-MM" format e.g. "2026-09" */
+  month:      text("month").notNull(),
+  recordedAt: timestamp("recorded_at").defaultNow().notNull(),
+})
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export type User             = typeof users.$inferSelect
+export type Client           = typeof clients.$inferSelect
+export type Report           = typeof reports.$inferSelect
+export type Notification     = typeof notifications.$inferSelect
+export type Lead             = typeof leads.$inferSelect
+export type LeadStatus       = typeof leadStatusEnum.enumValues[number]
+export type KeywordRanking   = typeof keywordRankings.$inferSelect
