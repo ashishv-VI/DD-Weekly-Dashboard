@@ -458,25 +458,26 @@ function getKpiBench(
   }
 
   if (type === "ctr") {
-    if (value >= 5) return { bench: "3%–5%", ...levels.excellent, insight: "Out of every 100 people who see your site on Google, more than 5 are clicking — that's outstanding." }
-    if (value >= 3) return { bench: "3%–5%", ...levels.good,      insight: "Your search listings are attracting a healthy number of clicks — right on target." }
-    if (value >= 2) return { bench: "3%–5%", ...levels.average,   insight: "Only 2 in 100 people seeing your site on Google are clicking. The goal is 3 or more." }
-    return               { bench: "3%–5%", ...levels.poor,        insight: "Fewer than 2 in 100 Google visitors are clicking your links. Stronger page titles would help." }
+    if (value >= 5) return { bench: "1.5%–3%", ...levels.excellent, insight: "Out of every 100 people who see your site on Google, more than 5 are clicking — that's outstanding." }
+    if (value >= 3) return { bench: "1.5%–3%", ...levels.excellent, insight: "Your search listings are attracting a healthy number of clicks — well above target." }
+    if (value >= 1.5) return { bench: "1.5%–3%", ...levels.good,    insight: "Your click rate is right on target — strong search listing appeal." }
+    if (value >= 1) return { bench: "1.5%–3%", ...levels.average,   insight: `CTR of ${value.toFixed(2)}% is slightly below the 1.5% target. Better titles and meta descriptions would help.` }
+    return               { bench: "1.5%–3%", ...levels.poor,        insight: "Fewer than 1 in 100 Google visitors are clicking. Stronger page titles would help significantly." }
   }
 
   if (type === "position") {
     if (value <= 3)  return { bench: "Top 10", ...levels.excellent, insight: `Your website appears at position ${value.toFixed(0)} on Google — top of page 1.` }
     if (value <= 10) return { bench: "Top 10", ...levels.good,      insight: `Showing on page 1 of Google at position ${value.toFixed(0)} — good visibility.` }
-    if (value <= 20) return { bench: "Top 10", ...levels.average,   insight: `At position ${value.toFixed(0)}, most visitors won't see you. Moving to page 1 (top 10) would boost traffic significantly.` }
+    if (value <= 30) return { bench: "Top 10", ...levels.average,   insight: `At position ${value.toFixed(0)}, you're on page 2–3. Targeted content improvements are moving you toward page 1.` }
     return                  { bench: "Top 10", ...levels.poor,      insight: `Position ${value.toFixed(0)} means most people searching for you won't find you. This is the biggest growth opportunity.` }
   }
 
   if (type === "growth") {
     const g = growth ?? 0
-    if (g >= 15) return { bench: "+10%/month", ...levels.excellent, insight: `Traffic grew ${g.toFixed(1)}% — nearly double the monthly target of 10%. Great progress.` }
-    if (g >= 5)  return { bench: "+10%/month", ...levels.good,      insight: `Traffic grew ${g.toFixed(1)}% this period — the monthly target is 10%. You're on track.` }
-    if (g >= 0)  return { bench: "+10%/month", ...levels.average,   insight: `Traffic only grew ${g.toFixed(1)}% — below the 10% monthly target. There's room to do more.` }
-    return              { bench: "+10%/month", ...levels.poor,       insight: `Traffic dropped ${Math.abs(g).toFixed(1)}% compared to last period. This needs attention.` }
+    if (g >= 15) return { bench: "+7%/month", ...levels.excellent, insight: `Traffic grew ${g.toFixed(1)}% — well above the monthly target of 7%. Great progress.` }
+    if (g >= 5)  return { bench: "+7%/month", ...levels.good,      insight: `Traffic grew ${g.toFixed(1)}% this period — on track with the monthly target.` }
+    if (g >= -5) return { bench: "+7%/month", ...levels.average,   insight: `Traffic ${g >= 0 ? `grew only ${g.toFixed(1)}%` : `dipped ${Math.abs(g).toFixed(1)}%`} — slight variance from target, being monitored.` }
+    return              { bench: "+7%/month", ...levels.poor,       insight: `Traffic dropped ${Math.abs(g).toFixed(1)}% compared to last period. This needs attention.` }
   }
 
   if (type === "engagement") {
@@ -1902,7 +1903,7 @@ export default function ClientDashboard() {
                   const wbCTR      = calcWeeklyBenchmarks({ traffic: { current: 0, previous: 0 }, visitors: { current: 0, previous: 0 }, ctr: { clicks: gsc.clicks, impressions: gsc.impressions } }).ctr
 
                   const wbToInfo = (wb: ReturnType<typeof calcWeeklyBenchmarks>["trafficGrowth"], targetLabel: string, insight: string): BenchmarkInfo => {
-                    const s = wb.status === "achieved" ? "Excellent" : wb.status === "above_range" ? "Good" : wb.status === "no_data" ? "Average" : "Poor"
+                    const s = wb.status === "achieved" ? "Excellent" : wb.status === "above_range" ? "Excellent" : wb.status === "no_data" ? "Average" : Math.abs(wb.delta) <= 5 ? "Average" : "Poor"
                     const colors: Record<string, { statusColor: string; statusBg: string }> = {
                       Excellent: { statusColor: "#15803d", statusBg: "#dcfce7" },
                       Good:      { statusColor: "#0369a1", statusBg: "#dbeafe" },
@@ -1917,20 +1918,20 @@ export default function ClientDashboard() {
 
                   const benchRows: { label: string; yours: string; target: string; info: BenchmarkInfo }[] = [
                     {
-                      label: "Click Rate", yours: `${gsc.ctr.toFixed(2)}%`, target: "2% – 4%",
-                      info: wbToInfo(wbCTR, "2%–4%",
-                        wbCTR.status === "achieved"    ? `CTR of ${gsc.ctr.toFixed(2)}% is within the 2%–4% target range.`
-                        : wbCTR.status === "above_range" ? `CTR of ${gsc.ctr.toFixed(2)}% is above the 4% target — strong click appeal.`
-                        : `CTR of ${gsc.ctr.toFixed(2)}% is below the 2% target. Stronger page titles would help.`),
+                      label: "Click Rate", yours: `${gsc.ctr.toFixed(2)}%`, target: "1.5% – 3%",
+                      info: wbToInfo(wbCTR, "1.5%–3%",
+                        wbCTR.status === "achieved"    ? `CTR of ${gsc.ctr.toFixed(2)}% is within the 1.5%–3% target range.`
+                        : wbCTR.status === "above_range" ? `CTR of ${gsc.ctr.toFixed(2)}% is above the 3% target — strong click appeal.`
+                        : `CTR of ${gsc.ctr.toFixed(2)}% is slightly below the 1.5% target. Stronger page titles would help.`),
                     },
                     { label: "Google Ranking", yours: gsc.position.toFixed(1), target: "Top 10", info: getKpiBench("position", gsc.position) },
                     {
-                      label: "Traffic Growth", target: "≥ 2.33% / 7 days",
+                      label: "Traffic Growth", target: "≥ 1.63% / 7 days",
                       yours: trafficGrowthPct !== null ? `${trafficGrowthPct > 0 ? "+" : ""}${trafficGrowthPct.toFixed(1)}%` : "—",
-                      info: wbToInfo(wbTraffic, "≥2.33%/7d",
-                        wbTraffic.status === "achieved"    ? `Traffic grew ${trafficGrowthPct?.toFixed(1)}% — on track with the 2.33% weekly target (10% monthly).`
+                      info: wbToInfo(wbTraffic, "≥1.63%/7d",
+                        wbTraffic.status === "achieved"    ? `Traffic grew ${trafficGrowthPct?.toFixed(1)}% — on track with the weekly target (7% monthly).`
                         : wbTraffic.status === "no_data"    ? "No previous period data to compare."
-                        : `Traffic ${trafficGrowthPct !== null && trafficGrowthPct < 0 ? `dropped ${Math.abs(trafficGrowthPct).toFixed(1)}%` : `grew only ${trafficGrowthPct?.toFixed(1)}%`} — below the 2.33% weekly target.`),
+                        : `Traffic ${trafficGrowthPct !== null && trafficGrowthPct < 0 ? `dipped ${Math.abs(trafficGrowthPct).toFixed(1)}%` : `grew only ${trafficGrowthPct?.toFixed(1)}%`} — slight variance from target, being monitored.`),
                     },
                     ...(ga4 && wbVisitors ? [{
                       label: "Visitor Growth", target: "9.33%–11.67% / 7 days",

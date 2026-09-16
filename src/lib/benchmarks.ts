@@ -35,8 +35,8 @@ export const PRORATION_FACTOR = REPORTING_WINDOW_DAYS / MONTHLY_PERIOD_DAYS
 export const MONTHLY_BENCHMARKS = {
   trafficGrowth: {
     type: "growth" as const,
-    /** Minimum acceptable monthly session growth (%) */
-    target: 10,
+    /** Minimum acceptable monthly session growth (%) — 7% is realistic for competitive markets */
+    target: 7,
   },
   visitorGrowth: {
     type: "growth" as const,
@@ -47,10 +47,10 @@ export const MONTHLY_BENCHMARKS = {
   },
   ctr: {
     type: "rate" as const,
-    /** CTR below this value is under-performing */
-    targetMin: 2,
+    /** CTR below this value is under-performing — 1.5% is realistic for competitive SEO */
+    targetMin: 1.5,
     /** CTR above this value is over-shooting the expected band */
-    targetMax: 4,
+    targetMax: 3,
   },
 } as const
 
