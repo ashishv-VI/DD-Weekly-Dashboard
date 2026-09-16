@@ -173,37 +173,36 @@ function calcHealthScore(gsc: GSCTotals | undefined, ga4: Partial<GA4Totals> | u
   let weighted = 0, totalWeight = 0
 
   if (gsc && gsc.impressions > 0) {
-    // CTR scoring — smoother gradient, 0.5–2% is Average not Poor
-    const ctrScore = gsc.ctr >= 5 ? 100 : gsc.ctr >= 3 ? 75 : gsc.ctr >= 2 ? 55 : gsc.ctr >= 0.5 ? 40 : 15
+    // CTR scoring — 1%+ is reasonable for competitive SEO markets
+    const ctrScore = gsc.ctr >= 5 ? 100 : gsc.ctr >= 3 ? 80 : gsc.ctr >= 2 ? 62 : gsc.ctr >= 1 ? 55 : gsc.ctr >= 0.5 ? 40 : 15
     comps.push({ label: "Click-Through Rate", value: gsc.ctr, score: ctrScore })
-    weighted += ctrScore * 25; totalWeight += 25
+    weighted += ctrScore * 10; totalWeight += 10
 
-    // Position scoring — graduated, no cliff edge at 20
-    // ≤3=100, ≤5=85, ≤10=68, ≤20=45, ≤30=30, ≤50=20, >50=12
-    const posScore = gsc.position <= 3 ? 100 : gsc.position <= 5 ? 85 : gsc.position <= 10 ? 68 : gsc.position <= 20 ? 45 : gsc.position <= 30 ? 30 : gsc.position <= 50 ? 20 : 12
+    // Position scoring — position 21-30 is still indexing, not failing
+    const posScore = gsc.position <= 3 ? 100 : gsc.position <= 5 ? 85 : gsc.position <= 10 ? 68 : gsc.position <= 20 ? 50 : gsc.position <= 30 ? 45 : gsc.position <= 50 ? 25 : 12
     comps.push({ label: "Average Position", value: gsc.position, score: posScore })
-    weighted += posScore * 25; totalWeight += 25
+    weighted += posScore * 12; totalWeight += 12
 
-    // Traffic growth — weight reduced 20→10 (volatile, outside agency control short-term)
+    // Traffic growth — short-term volatile metric, lower weight
     const growth = gsc.prevClicks > 0 ? ((gsc.clicks - gsc.prevClicks) / gsc.prevClicks) * 100 : 0
-    const growthScore = growth > 30 ? 100 : growth > 10 ? 80 : growth > 0 ? 65 : growth > -10 ? 45 : growth > -30 ? 25 : 10
+    const growthScore = growth > 30 ? 100 : growth > 10 ? 80 : growth > 0 ? 65 : growth > -10 ? 50 : growth > -30 ? 30 : 10
     comps.push({ label: "Traffic Growth", value: growth, score: growthScore })
-    weighted += growthScore * 10; totalWeight += 10
+    weighted += growthScore * 4; totalWeight += 4
   }
 
   if (ga4) {
-    // Engagement weight raised 20→25 (agency can directly influence this)
+    // Engagement — agency can directly improve this through content & UX
     const eng = ga4.engagementRate ?? 0
-    const engScore = eng >= 70 ? 100 : eng >= 55 ? 80 : eng >= 40 ? 60 : eng >= 25 ? 40 : 20
+    const engScore = eng >= 70 ? 100 : eng >= 55 ? 80 : eng >= 40 ? 62 : eng >= 25 ? 40 : 20
     comps.push({ label: "Engagement Rate", value: eng, score: engScore })
-    weighted += engScore * 25; totalWeight += 25
+    weighted += engScore * 20; totalWeight += 20
   }
 
   const aiScore = (aiTraffic && aiTraffic.total > 0) ? 80 : 20
   comps.push({ label: "AI Visibility", value: aiTraffic?.total ?? 0, score: aiScore })
-  weighted += aiScore * 10; totalWeight += 10
+  weighted += aiScore * 12; totalWeight += 12
 
-  // Keyword rankings — only when data is configured
+  // Keyword rankings — core agency deliverable, highest weight
   const withRanks = rankingRows.filter(r => r.currentRank !== null)
   if (withRanks.length > 0) {
     const top10Pct = (withRanks.filter(r => r.currentRank! <= 10).length / withRanks.length) * 100
@@ -214,10 +213,10 @@ function calcHealthScore(gsc: GSCTotals | undefined, ga4: Partial<GA4Totals> | u
       : 60
     const rkScore = Math.round(topScore * 0.6 + improveScore * 0.4)
     comps.push({ label: "Keyword Rankings", value: top10Pct, score: rkScore })
-    weighted += rkScore * 20; totalWeight += 20
+    weighted += rkScore * 30; totalWeight += 30
   }
 
-  // Backlinks — only when data is provided by admin
+  // Backlinks — direct agency deliverable
   if (backlinks && backlinks.current !== null) {
     const blCurr = backlinks.current
     const blPrev = backlinks.previous
@@ -229,7 +228,7 @@ function calcHealthScore(gsc: GSCTotals | undefined, ga4: Partial<GA4Totals> | u
       blScore = ratio >= 1 ? 80 : ratio >= 0.75 ? 60 : ratio >= 0.5 ? 40 : 20
     }
     comps.push({ label: "Backlinks", value: blCurr, score: blScore })
-    weighted += blScore * 10; totalWeight += 10
+    weighted += blScore * 12; totalWeight += 12
   }
 
   const score = totalWeight > 0 ? Math.round(weighted / totalWeight) : 0
