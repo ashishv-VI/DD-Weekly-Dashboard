@@ -2101,7 +2101,7 @@ export default function ClientDashboard() {
             {/* ══════════════════════════════ TRAFFIC ══════════════════════════════ */}
             {activeTab === "traffic" && (() => {
               // ── Local helpers ──────────────────────────────────────────
-              const CH_COLORS: Record<string, string> = { "Direct": "#3B82F6", "Organic Search": "#10B981", "Referral": "#8B5CF6", "Unassigned": "#F59E0B", "Cross-network": "#94A3B8" }
+              const CH_COLORS: Record<string, string> = { "Direct": "#3B82F6", "Organic Search": "#10B981", "Referral": "#F59E0B", "Unassigned": "#94A3B8", "Organic Social": "#EC4899", "Cross-network": "#8B5CF6", "AI Assistant": "#6366F1" }
               const chColor = (name: string) => CH_COLORS[name] ?? "#6B7280"
               const healthBadge = (change: number | null, engRate: number) => {
                 if (change === null || (Math.abs(change) < 1 && change !== null)) return { label: "Stable", cls: "bg-slate-100 text-slate-600 border-slate-200" }
