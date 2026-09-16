@@ -2172,18 +2172,32 @@ export default function ClientDashboard() {
               })
               // ── Insights ───────────────────────────────────────────────
               const top = channels[0]
-              const declined = channels.filter(c => c.prevSessions > 0 && c.sessions < c.prevSessions * 0.9)
+              // Use 5% threshold so small declines (e.g. -8%) are caught
+              const declined = channels.filter(c => c.prevSessions > 0 && c.sessions < c.prevSessions * 0.95)
+              const organicPctChange = organic && organic.prevSessions > 0 ? pct(organic.sessions, organic.prevSessions) : null
+              const referralPctChange = referral && referral.prevSessions > 0 ? pct(referral.sessions, referral.prevSessions) : null
               const insights: string[] = [
                 top ? `${top.channel} is your top channel at ${totalChannelSessions ? Math.round((top.sessions / totalChannelSessions) * 100) : 0}% share with ${top.engagementRate.toFixed(0)}% engagement rate.` : "",
                 organic && organic.engagementRate > 50 ? `Organic Search has strong engagement (${organic.engagementRate.toFixed(0)}%), indicating high-quality, intent-driven visitors.` : organic ? `Organic Search engagement is ${organic.engagementRate.toFixed(0)}% — consider content improvements.` : "",
                 declined.length > 0 ? `${declined.slice(0, 2).map(c => c.channel).join(" and ")} ${declined.length > 1 ? "have" : "has"} declined this period — monitor for recovery signals.` : "All channels are holding steady or growing this period.",
               ].filter(Boolean)
               const actions: string[] = [
-                organic && pct(organic.sessions, organic.prevSessions) !== null && ((pct(organic.sessions, organic.prevSessions) as number) < -3) ? "Investigate declining organic pages and refresh underperforming content." : "",
-                referral && pct(referral.sessions, referral.prevSessions) !== null && ((pct(referral.sessions, referral.prevSessions) as number) < -15) ? "Recover lost referral sources — identify broken backlinks and rebuild partnerships." : "",
+                organicPctChange !== null && organicPctChange < -3 ? "Investigate declining organic pages and refresh underperforming content." : "",
+                referralPctChange !== null && referralPctChange < -15 ? "Recover lost referral sources — identify broken backlinks and rebuild partnerships." : "",
                 avgEngRate < 45 ? "Improve user engagement by optimising page speed, CTAs and content relevance." : "",
                 "Monitor direct traffic and analyse branded vs non-branded search share.",
               ].filter(Boolean)
+              // Dynamic opportunities — only show if condition is actually true
+              const dynOpps: { title: string; p: string; pc: string; desc: string }[] = [
+                ...(organic && (organic.sessions / (totalChannelSessions || 1)) < 0.2
+                  ? [{ title: "Grow Organic Traffic", p: "High", pc: "text-red-600 bg-red-50 border-red-100", desc: `${organic ? Math.round((organic.sessions / (totalChannelSessions || 1)) * 100) : 0}% organic share with strong engagement. Expand content targeting.` }] : []),
+                ...(referralPctChange !== null && referralPctChange < -10
+                  ? [{ title: "Recover Referral Traffic", p: "High", pc: "text-red-600 bg-red-50 border-red-100", desc: `Referral dropped ${Math.abs(referralPctChange).toFixed(1)}% this period. Rebuild partnerships and fix broken backlinks.` }] : []),
+                ...(avgEngRate < 50
+                  ? [{ title: "Improve Engagement", p: "Medium", pc: "text-amber-600 bg-amber-50 border-amber-100", desc: `${avgEngRate.toFixed(0)}% average engagement rate — optimise page content and CTAs to improve visitor interaction.` }] : []),
+                ...(organicPctChange !== null && organicPctChange < -5
+                  ? [{ title: "Recover Organic Traffic", p: "High", pc: "text-red-600 bg-red-50 border-red-100", desc: `Organic sessions dropped ${Math.abs(organicPctChange).toFixed(1)}% — review content and check for ranking drops in Search Console.` }] : []),
+              ]
               return (
                 <div className="space-y-5 anim-card">
 
@@ -2271,7 +2285,8 @@ export default function ClientDashboard() {
 
                     {/* Traffic Distribution Donut */}
                     <div className="col-span-12 lg:col-span-2 bg-white border border-slate-200 rounded-xl p-5">
-                      <div className="text-sm font-semibold text-slate-900 mb-3">Traffic Distribution</div>
+                      <div className="text-sm font-semibold text-slate-900">Traffic Distribution</div>
+                      <div className="text-xs text-slate-400 mb-3">Last {trafficPeriod === "7D" ? "7 days" : trafficPeriod === "90D" ? "90 days" : "30 days"}</div>
                       <div className="flex justify-center mb-3">
                         <svg viewBox="0 0 160 160" width="130" height="130">
                           <circle cx="80" cy="80" r="54" fill="none" stroke="#F1F5F9" strokeWidth="22" />
@@ -2336,11 +2351,7 @@ export default function ClientDashboard() {
                           <span className="text-xs font-bold text-amber-600 uppercase tracking-wide">Top Opportunities</span>
                         </div>
                         <div className="space-y-2">
-                          {[
-                            { title: "Grow Organic Traffic", p: "High", pc: "text-red-600 bg-red-50 border-red-100", desc: `${organic ? Math.round((organic.sessions / (totalChannelSessions || 1)) * 100) : 0}% share with strong engagement. Expand content targeting.` },
-                            { title: "Recover Referral Traffic", p: "High", pc: "text-red-600 bg-red-50 border-red-100", desc: "Referral declined this period. Rebuild partnerships and fix broken backlinks." },
-                            { title: "Improve Engagement", p: "Medium", pc: "text-amber-600 bg-amber-50 border-amber-100", desc: "Direct traffic engagement is below site average." },
-                          ].map((opp, i) => (
+                          {(dynOpps.length > 0 ? dynOpps : [{ title: "Keep up the momentum", p: "Good", pc: "text-green-600 bg-green-50 border-green-100", desc: "All channels are performing well. Focus on content quality and maintaining backlink growth." }]).map((opp, i) => (
                             <div key={i} className="border border-slate-100 rounded-lg p-2.5 hover:border-slate-200 transition-colors">
                               <div className="flex items-center justify-between gap-1 mb-1">
                                 <span className="text-xs font-semibold text-slate-800">{opp.title}</span>
