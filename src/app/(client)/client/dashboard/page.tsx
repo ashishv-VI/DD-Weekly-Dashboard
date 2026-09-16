@@ -2100,7 +2100,7 @@ export default function ClientDashboard() {
             {/* ══════════════════════════════ TRAFFIC ══════════════════════════════ */}
             {activeTab === "traffic" && (() => {
               // ── Local helpers ──────────────────────────────────────────
-              const CH_COLORS: Record<string, string> = { "Direct": "#3B82F6", "Organic Search": "#10B981", "Referral": "#F59E0B", "Unassigned": "#94A3B8", "Organic Social": "#EC4899", "Cross-network": "#8B5CF6", "AI Assistant": "#6366F1" }
+              const CH_COLORS: Record<string, string> = { "Direct": "#3B82F6", "Organic Search": "#10B981", "Referral": "#F59E0B", "Unassigned": "#94A3B8", "Organic Social": "#EC4899", "Cross-network": "#A78BFA", "AI Assistant": "#06B6D4" }
               const chColor = (name: string) => CH_COLORS[name] ?? "#6B7280"
               const healthBadge = (change: number | null, engRate: number) => {
                 if (change === null || (Math.abs(change) < 1 && change !== null)) return { label: "Stable", cls: "bg-slate-100 text-slate-600 border-slate-200" }
@@ -2139,7 +2139,7 @@ export default function ClientDashboard() {
               const avgEngRate = channels.length ? channels.reduce((s, c) => s + c.engagementRate, 0) / channels.length : 0
               const healthScore = Math.min(96, Math.round(avgEngRate * 0.65 + 32))
               const kpiCards = [
-                { label: "Total Sessions", value: totalChannelSessions, prev: prevTotal, color: "#8B5CF6", id: "total" },
+                { label: "Total Sessions", value: totalChannelSessions, prev: prevTotal, color: "#334155", id: "total" },
                 { label: "Organic Sessions", value: organic?.sessions ?? 0, prev: organic?.prevSessions ?? 0, color: "#10B981", id: "organic" },
                 { label: "Direct Sessions", value: direct?.sessions ?? 0, prev: direct?.prevSessions ?? 0, color: "#3B82F6", id: "direct" },
                 { label: "Referral Sessions", value: referral?.sessions ?? 0, prev: referral?.prevSessions ?? 0, color: "#F59E0B", id: "referral" },
@@ -2232,7 +2232,7 @@ export default function ClientDashboard() {
                         <div>
                           <div className="text-sm font-semibold text-slate-900">Traffic Trend</div>
                           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2">
-                            {[{ label: "Total Sessions", color: "#8B5CF6" }, { label: "Organic Search", color: "#10B981" }, { label: "Direct", color: "#3B82F6" }, { label: "Referral", color: "#F59E0B" }].map(l => (
+                            {[{ label: "Total Sessions", color: "#334155" }, { label: "Organic Search", color: "#10B981" }, { label: "Direct", color: "#3B82F6" }, { label: "Referral", color: "#F59E0B" }].map(l => (
                               <div key={l.label} className="flex items-center gap-1.5">
                                 <div className="w-3 h-0.5 rounded" style={{ background: l.color }} />
                                 <span className="text-xs text-slate-500">{l.label}</span>
@@ -2255,8 +2255,8 @@ export default function ClientDashboard() {
                           </g>
                         ))}
                         <g transform="translate(38,6)">
-                          <path d={svgArea(totalTrend, maxY, chartW, chartH)} fill="#8B5CF6" fillOpacity="0.05" />
-                          <path d={svgLine(totalTrend, maxY, chartW, chartH)} fill="none" stroke="#8B5CF6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                          <path d={svgArea(totalTrend, maxY, chartW, chartH)} fill="#334155" fillOpacity="0.04" />
+                          <path d={svgLine(totalTrend, maxY, chartW, chartH)} fill="none" stroke="#334155" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                           <path d={svgLine(organicTrend, maxY, chartW, chartH)} fill="none" stroke="#10B981" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                           <path d={svgLine(directTrend, maxY, chartW, chartH)} fill="none" stroke="#3B82F6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                           <path d={svgLine(referralTrend, maxY, chartW, chartH)} fill="none" stroke="#F59E0B" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
