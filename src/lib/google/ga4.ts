@@ -166,6 +166,7 @@ export interface ChannelRow {
   engagementRate: number
   conversions: number
   prevSessions: number
+  avgSessionDuration: number
 }
 
 export async function getTrafficByChannel(
@@ -188,6 +189,7 @@ export async function getTrafficByChannel(
           { name: "totalUsers" },
           { name: "engagementRate" },
           { name: "conversions" },
+          { name: "averageSessionDuration" },
         ],
         orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
       },
@@ -217,6 +219,7 @@ export async function getTrafficByChannel(
       engagementRate: Number(r.metricValues?.[2]?.value ?? 0) * 100,
       conversions: Number(r.metricValues?.[3]?.value ?? 0),
       prevSessions: prevMap.get(ch) ?? 0,
+      avgSessionDuration: Number(r.metricValues?.[4]?.value ?? 0),
     }
   })
 }

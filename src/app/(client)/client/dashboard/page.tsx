@@ -16,7 +16,7 @@ interface KeywordWithPage { keyword: string; page: string; clicks: number; impre
 interface PageRow { url: string; clicks: number; impressions: number; ctr: number; position: number }
 interface DeviceRow { device: string; sessions: number; users: number }
 interface CountryRow { country: string; sessions: number; users: number }
-interface ChannelRow { channel: string; sessions: number; users: number; engagementRate: number; conversions: number; prevSessions: number }
+interface ChannelRow { channel: string; sessions: number; users: number; engagementRate: number; conversions: number; prevSessions: number; avgSessionDuration: number }
 interface AISourceRow { source: string; sessions: number; users: number; avgDuration: number; conversions: number }
 interface AITrafficData { total: number; totalUsers: number; bySource: AISourceRow[]; topPages: { page: string; sessions: number; users: number }[]; daily: { date: string; sessions: number }[] }
 interface UserBreakdownRow { type: "new" | "returning"; sessions: number; users: number; avgDuration: number; engagementRate: number; pagesPerSession: number }
@@ -2110,12 +2110,18 @@ export default function ClientDashboard() {
               // ── Local helpers ──────────────────────────────────────────
               const CH_COLORS: Record<string, string> = { "Direct": "#3B82F6", "Organic Search": "#10B981", "Referral": "#F59E0B", "Unassigned": "#94A3B8", "Organic Social": "#EC4899", "Cross-network": "#A78BFA", "AI Assistant": "#06B6D4" }
               const chColor = (name: string) => CH_COLORS[name] ?? "#6B7280"
-              const healthBadge = (change: number | null, engRate: number) => {
-                if (change === null || (Math.abs(change) < 1 && change !== null)) return { label: "Stable", cls: "bg-slate-100 text-slate-600 border-slate-200" }
-                if (engRate > 55) return { label: "Healthy", cls: "bg-emerald-100 text-emerald-700 border-emerald-200" }
-                if (change < -25) return { label: "Critical", cls: "bg-red-100 text-red-700 border-red-200" }
-                if (change < 0) return { label: "Monitor", cls: "bg-amber-100 text-amber-700 border-amber-200" }
-                return { label: "Healthy", cls: "bg-emerald-100 text-emerald-700 border-emerald-200" }
+              // Status weighs traffic trend, engagement, bounce rate AND key events —
+              // a channel is never "Healthy" on rising sessions alone.
+              const channelStatus = (ch: ChannelRow) => {
+                const bounce = 100 - ch.engagementRate
+                const change = ch.prevSessions > 0 ? pct(ch.sessions, ch.prevSessions) : null
+                if (ch.sessions < 20) return { label: "Low Volume", cls: "bg-slate-100 text-slate-600 border-slate-200" }
+                if (ch.engagementRate < 40 || bounce > 60) return { label: "Low Quality", cls: "bg-red-100 text-red-700 border-red-200" }
+                if ((change !== null && change < -15) || (ch.conversions === 0 && ch.sessions >= 50 && ch.engagementRate < 45)) return { label: "Needs Attention", cls: "bg-red-100 text-red-700 border-red-200" }
+                if (change !== null && change < -3) return { label: "Monitor", cls: "bg-amber-100 text-amber-700 border-amber-200" }
+                if (change !== null && change > 20 && ch.engagementRate >= 40) return { label: "Growing", cls: "bg-blue-100 text-blue-700 border-blue-200" }
+                if (ch.engagementRate >= 50) return { label: "Healthy", cls: "bg-emerald-100 text-emerald-700 border-emerald-200" }
+                return { label: "Monitor", cls: "bg-amber-100 text-amber-700 border-amber-200" }
               }
               const sparkPts = (prev: number, cur: number, W = 96, H = 28) => {
                 const n = 14
@@ -2183,28 +2189,107 @@ export default function ClientDashboard() {
               const declined = channels.filter(c => c.prevSessions > 0 && c.sessions < c.prevSessions * 0.95)
               const organicPctChange = organic && organic.prevSessions > 0 ? pct(organic.sessions, organic.prevSessions) : null
               const referralPctChange = referral && referral.prevSessions > 0 ? pct(referral.sessions, referral.prevSessions) : null
-              const insights: string[] = [
-                top ? `${top.channel} is your top channel at ${totalChannelSessions ? Math.round((top.sessions / totalChannelSessions) * 100) : 0}% share with ${top.engagementRate.toFixed(0)}% engagement rate.` : "",
-                organic && organic.engagementRate > 50 ? `Organic Search has strong engagement (${organic.engagementRate.toFixed(0)}%), indicating high-quality, intent-driven visitors.` : organic ? `Organic Search engagement is ${organic.engagementRate.toFixed(0)}% — consider content improvements.` : "",
-                declined.length > 0 ? `${declined.slice(0, 2).map(c => c.channel).join(" and ")} ${declined.length > 1 ? "have" : "has"} declined this period — monitor for recovery signals.` : "All channels are holding steady or growing this period.",
-              ].filter(Boolean)
+              // Direct share above this is unusual enough to flag as a possible tracking gap
+              const directShare = direct && totalChannelSessions ? (direct.sessions / totalChannelSessions) * 100 : 0
+              const insights: { text: string; tone: "good" | "warn" | "bad" }[] = [
+                top ? { text: `${top.channel} is your top channel — ${totalChannelSessions ? Math.round((top.sessions / totalChannelSessions) * 100) : 0}% of your ${fmt(totalChannelSessions)} sessions came from there, with a ${top.engagementRate.toFixed(0)}% engagement rate.`, tone: "good" } : null,
+                organic && organic.engagementRate > 50
+                  ? { text: `Organic Search engagement is strong at ${organic.engagementRate.toFixed(0)}% — visitors finding you on Google are sticking around, a sign your content matches what they're searching for.`, tone: "good" }
+                  : organic ? { text: `Organic Search engagement is only ${organic.engagementRate.toFixed(0)}% — visitors land from Google but leave quickly, so the top organic pages likely need stronger content or a clearer next step.`, tone: "warn" } : null,
+                declined.length > 0
+                  ? { text: `${declined.slice(0, 2).map(c => c.channel).join(" and ")} ${declined.length > 1 ? "are" : "is"} down this period — worth checking what changed before it compounds.`, tone: "bad" }
+                  : { text: "All channels are holding steady or growing this period — nothing needs urgent attention right now.", tone: "good" },
+                directShare > 60
+                  ? { text: `Direct traffic is unusually high at ${Math.round(directShare)}% of all sessions. That can be genuine brand recall, but it's also what happens when campaign links are missing UTM tags — worth a quick attribution check.`, tone: "warn" }
+                  : null,
+              ].filter((i): i is { text: string; tone: "good" | "warn" | "bad" } => i !== null)
               const actions: string[] = [
-                organicPctChange !== null && organicPctChange < -3 ? "Investigate declining organic pages and refresh underperforming content." : "",
-                referralPctChange !== null && referralPctChange < -15 ? "Recover lost referral sources — identify broken backlinks and rebuild partnerships." : "",
-                avgEngRate < 45 ? "Improve user engagement by optimising page speed, CTAs and content relevance." : "",
-                "Monitor direct traffic and analyse branded vs non-branded search share.",
+                organicPctChange !== null && organicPctChange < -3
+                  ? `Audit organic landing pages — organic sessions dropped ${Math.abs(organicPctChange).toFixed(1)}% this period, so we'll review the top pages for ranking or content issues.`
+                  : "",
+                referralPctChange !== null && referralPctChange < -15
+                  ? `Rebuild referral sources — referral traffic fell ${Math.abs(referralPctChange).toFixed(1)}%, so we'll check for broken backlinks and lapsed partnerships.`
+                  : "",
+                avgEngRate < 45
+                  ? `Improve on-page engagement — average engagement across channels is ${avgEngRate.toFixed(0)}%, so we'll review page speed, calls-to-action and content relevance on the pages losing visitors fastest.`
+                  : "",
+                directShare > 50
+                  ? `Audit direct traffic attribution — Direct accounts for ${Math.round(directShare)}% of sessions, so we'll check UTM tagging and campaign links to confirm it's genuine direct traffic and not under-tracked campaigns.`
+                  : "Monitor direct traffic — track branded vs non-branded search share to see how much of Direct reflects real brand recall.",
               ].filter(Boolean)
-              // Dynamic opportunities — only show if condition is actually true
-              const dynOpps: { title: string; p: string; pc: string; desc: string }[] = [
+              // Dynamic opportunities — only shown when the underlying condition is actually true;
+              // impact is only quantified when it's derivable from real session data, otherwise "To be evaluated".
+              const dynOpps: { title: string; reason: string; impact: string; priority: string; pc: string }[] = [
                 ...(organic && (organic.sessions / (totalChannelSessions || 1)) < 0.2
-                  ? [{ title: "Grow Organic Traffic", p: "High", pc: "text-red-600 bg-red-50 border-red-100", desc: `${organic ? Math.round((organic.sessions / (totalChannelSessions || 1)) * 100) : 0}% organic share with strong engagement. Expand content targeting.` }] : []),
-                ...(referralPctChange !== null && referralPctChange < -10
-                  ? [{ title: "Recover Referral Traffic", p: "High", pc: "text-red-600 bg-red-50 border-red-100", desc: `Referral dropped ${Math.abs(referralPctChange).toFixed(1)}% this period. Rebuild partnerships and fix broken backlinks.` }] : []),
+                  ? [{
+                      title: "Grow Organic Traffic",
+                      reason: `Organic Search is only ${Math.round((organic.sessions / (totalChannelSessions || 1)) * 100)}% of your total sessions — a small share of your traffic mix relative to other channels.`,
+                      impact: "To be evaluated",
+                      priority: "High", pc: "text-red-600 bg-red-50 border-red-100",
+                    }] : []),
+                ...(referralPctChange !== null && referralPctChange < -10 && referral
+                  ? [{
+                      title: "Recover Referral Traffic",
+                      reason: `Referral sessions dropped ${Math.abs(referralPctChange).toFixed(1)}% this period (${fmt(referral.prevSessions)} → ${fmt(referral.sessions)}).`,
+                      impact: `Recovering to the prior level would add back roughly ${fmt(Math.max(0, referral.prevSessions - referral.sessions))} sessions.`,
+                      priority: "High", pc: "text-red-600 bg-red-50 border-red-100",
+                    }] : []),
                 ...(avgEngRate < 50
-                  ? [{ title: "Improve Engagement", p: "Medium", pc: "text-amber-600 bg-amber-50 border-amber-100", desc: `${avgEngRate.toFixed(0)}% average engagement rate — optimise page content and CTAs to improve visitor interaction.` }] : []),
-                ...(organicPctChange !== null && organicPctChange < -5
-                  ? [{ title: "Recover Organic Traffic", p: "High", pc: "text-red-600 bg-red-50 border-red-100", desc: `Organic sessions dropped ${Math.abs(organicPctChange).toFixed(1)}% — review content and check for ranking drops in Search Console.` }] : []),
+                  ? [{
+                      title: "Improve Site Engagement",
+                      reason: `Average engagement across channels is ${avgEngRate.toFixed(0)}% — a large share of visitors leave without interacting with the page.`,
+                      impact: "To be evaluated",
+                      priority: "Medium", pc: "text-amber-600 bg-amber-50 border-amber-100",
+                    }] : []),
+                ...(organicPctChange !== null && organicPctChange < -5 && organic
+                  ? [{
+                      title: "Recover Organic Traffic",
+                      reason: `Organic sessions dropped ${Math.abs(organicPctChange).toFixed(1)}% this period (${fmt(organic.prevSessions)} → ${fmt(organic.sessions)}).`,
+                      impact: `Recovering to the prior level would add back roughly ${fmt(Math.max(0, organic.prevSessions - organic.sessions))} sessions.`,
+                      priority: "High", pc: "text-red-600 bg-red-50 border-red-100",
+                    }] : []),
               ]
+              // ── "Your Website This Month" — four client-facing groups, all from real data ──
+              const keyWins: string[] = [
+                totalChannelSessions > 0 && prevTotal > 0 && totalChannelSessions > prevTotal
+                  ? `Total traffic is up ${Math.round(((totalChannelSessions - prevTotal) / prevTotal) * 100)}% this period (${fmt(prevTotal)} → ${fmt(totalChannelSessions)}).`
+                  : "",
+                organic && organic.prevSessions > 0 && organic.sessions > organic.prevSessions
+                  ? `Organic sessions grew ${Math.round(((organic.sessions - organic.prevSessions) / organic.prevSessions) * 100)}% — more people are finding you on Google.`
+                  : "",
+                channels.filter(c => c.sessions > 0 && c.engagementRate > 50).length > 0
+                  ? `${channels.filter(c => c.engagementRate > 50).slice(0, 2).map(c => c.channel).join(" and ")} visitors are highly engaged (50%+ engagement rate).`
+                  : "",
+              ].filter(Boolean)
+              const needsAttention: string[] = [
+                declined.length > 0
+                  ? `${declined.slice(0, 2).map(c => c.channel).join(" and ")} traffic ${declined.length > 1 ? "are" : "is"} down this period.`
+                  : "",
+                avgEngRate < 50
+                  ? `Average engagement across channels is only ${avgEngRate.toFixed(0)}% — many visitors leave without interacting.`
+                  : "",
+                directShare > 60
+                  ? `Direct traffic is unusually high at ${Math.round(directShare)}% of sessions — worth checking campaign attribution.`
+                  : "",
+              ].filter(Boolean)
+              const whatWereDoing: string[] = [
+                declined.length > 0
+                  ? `Investigating why ${declined.slice(0, 2).map(c => c.channel).join(" and ")} traffic dropped and building a recovery plan.`
+                  : "Maintaining performance across all channels and looking for new growth opportunities.",
+                organicPctChange !== null && organicPctChange < 0
+                  ? "Reviewing your top Google landing pages and optimising them to recover search rankings."
+                  : "Identifying new keyword opportunities to bring more high-intent visitors from Google.",
+                avgEngRate < 50
+                  ? "Analysing pages where visitors leave quickly and improving them to keep people engaged longer."
+                  : "Focusing on converting your high-engagement audience into enquiries and leads.",
+              ]
+              const expectedImpact: string[] = [
+                declined.length > 0 ? `Recovered ${declined.slice(0, 2).map(c => c.channel).join(" and ")} traffic back toward its prior level.` : "",
+                avgEngRate < 50 ? "A higher overall engagement rate as underperforming pages are improved." : "",
+                organicPctChange !== null && organicPctChange < 0 ? "Improved search rankings and recovered organic visibility." : "",
+                directShare > 60 ? "Clearer attribution, so we know which channels are genuinely driving traffic." : "",
+              ].filter(Boolean)
+              if (expectedImpact.length === 0) expectedImpact.push("Continued traffic growth and stronger engagement as we keep optimising top-performing channels.")
               return (
                 <div className="space-y-5 anim-card">
 
@@ -2232,9 +2317,9 @@ export default function ClientDashboard() {
                           </div>
                           <div className="text-2xl font-bold text-slate-900 tabular-nums mb-0.5">{fmt(card.value)}</div>
                           {change !== null ? (
-                            <div className={`text-xs font-semibold flex items-center gap-0.5 mb-2.5 ${change >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+                            <div className={`text-xs font-semibold flex items-center gap-0.5 mb-2.5 flex-wrap ${change >= 0 ? "text-emerald-600" : "text-red-500"}`}>
                               <span>{change >= 0 ? "↑" : "↓"}</span><span>{Math.abs(change).toFixed(1)}%</span>
-                              <span className="text-slate-400 font-normal ml-0.5">vs prev period</span>
+                              <span className="text-slate-400 font-normal ml-0.5">vs {fmt(card.prev)} previous period</span>
                             </div>
                           ) : <div className="text-xs text-slate-400 mb-2.5">No previous data</div>}
                           <svg width="96" height="28" viewBox="0 0 96 28" className="w-full opacity-75 group-hover:opacity-100 transition-opacity">
@@ -2329,10 +2414,10 @@ export default function ClientDashboard() {
                         <div className="space-y-2.5">
                           {insights.map((ins, i) => (
                             <div key={i} className="flex gap-2">
-                              <div className={`w-3.5 h-3.5 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${i === 0 ? "bg-emerald-100" : i === 1 ? "bg-amber-100" : "bg-red-100"}`}>
-                                <div className={`w-1.5 h-1.5 rounded-full ${i === 0 ? "bg-emerald-500" : i === 1 ? "bg-amber-500" : "bg-red-500"}`} />
+                              <div className={`w-3.5 h-3.5 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${ins.tone === "good" ? "bg-emerald-100" : ins.tone === "warn" ? "bg-amber-100" : "bg-red-100"}`}>
+                                <div className={`w-1.5 h-1.5 rounded-full ${ins.tone === "good" ? "bg-emerald-500" : ins.tone === "warn" ? "bg-amber-500" : "bg-red-500"}`} />
                               </div>
-                              <p className="text-xs text-slate-600 leading-relaxed">{ins}</p>
+                              <p className="text-xs text-slate-600 leading-relaxed">{ins.text}</p>
                             </div>
                           ))}
                         </div>
@@ -2359,13 +2444,14 @@ export default function ClientDashboard() {
                           <span className="text-xs font-bold text-amber-600 uppercase tracking-wide">Top Opportunities</span>
                         </div>
                         <div className="space-y-2">
-                          {(dynOpps.length > 0 ? dynOpps : [{ title: "Keep up the momentum", p: "Good", pc: "text-green-600 bg-green-50 border-green-100", desc: "All channels are performing well. Focus on content quality and maintaining backlink growth." }]).map((opp, i) => (
+                          {(dynOpps.length > 0 ? dynOpps : [{ title: "Keep up the momentum", reason: "All channels are stable or growing with healthy engagement this period.", impact: "Maintaining current content quality and backlink growth should sustain this.", priority: "Good", pc: "text-green-600 bg-green-50 border-green-100" }]).map((opp, i) => (
                             <div key={i} className="border border-slate-100 rounded-lg p-2.5 hover:border-slate-200 transition-colors">
                               <div className="flex items-center justify-between gap-1 mb-1">
                                 <span className="text-xs font-semibold text-slate-800">{opp.title}</span>
-                                <span className={`text-xs font-bold px-1.5 py-0.5 rounded border ${opp.pc}`}>{opp.p}</span>
+                                <span className={`text-xs font-bold px-1.5 py-0.5 rounded border shrink-0 ${opp.pc}`}>{opp.priority}</span>
                               </div>
-                              <p className="text-xs text-slate-500 leading-snug">{opp.desc}</p>
+                              <p className="text-xs text-slate-500 leading-snug">{opp.reason}</p>
+                              <p className="text-xs text-slate-400 leading-snug mt-1">{opp.impact.startsWith("To be evaluated") || opp.impact === "To be evaluated" ? "Potential impact: to be evaluated." : `Potential impact: ${opp.impact}`}</p>
                             </div>
                           ))}
                         </div>
@@ -2377,7 +2463,7 @@ export default function ClientDashboard() {
                   <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
                     <div className="px-5 py-4 border-b border-slate-100">
                       <div className="text-sm font-semibold text-slate-900">Traffic Channel Performance</div>
-                      <div className="text-xs text-slate-400 mt-0.5">Sessions, share and health across all acquisition channels</div>
+                      <div className="text-xs text-slate-400 mt-0.5">Sessions, growth and status across all acquisition channels</div>
                     </div>
                     {channels.length === 0 ? (
                       <div className="py-12 text-center text-sm text-slate-400">No channel data available for this period</div>
@@ -2391,7 +2477,8 @@ export default function ClientDashboard() {
                               {compare && <th className="text-right text-xs font-semibold text-blue-400 px-4 py-3 bg-blue-50/50">Prev Sessions</th>}
                               <th className="text-right text-xs font-semibold text-slate-500 px-4 py-3">Share %</th>
                               <th className="text-right text-xs font-semibold text-slate-500 px-4 py-3">Growth %</th>
-                              <th className="text-center text-xs font-semibold text-slate-500 px-4 py-3">Health</th>
+                              <th className="text-right text-xs font-semibold text-slate-500 px-4 py-3">Key Events</th>
+                              <th className="text-center text-xs font-semibold text-slate-500 px-4 py-3">Status</th>
                               <th className="text-right text-xs font-semibold text-slate-500 px-5 py-3">Engagement Rate</th>
                             </tr>
                           </thead>
@@ -2399,7 +2486,7 @@ export default function ClientDashboard() {
                             {channels.map((ch, i) => {
                               const share = totalChannelSessions ? (ch.sessions / totalChannelSessions) * 100 : 0
                               const change = pct(ch.sessions, ch.prevSessions)
-                              const health = healthBadge(change, ch.engagementRate)
+                              const status = channelStatus(ch)
                               return (
                                 <tr key={ch.channel} className="border-b border-slate-50 hover:bg-blue-50/30 transition-colors">
                                   <td className="px-5 py-3.5">
@@ -2432,8 +2519,9 @@ export default function ClientDashboard() {
                                       </span>
                                     ) : <span className="text-xs text-slate-400 font-medium">0.0% Stable</span>}
                                   </td>
+                                  <td className="px-4 py-3.5 text-right text-xs text-slate-600 tabular-nums">{fmt(ch.conversions)}</td>
                                   <td className="px-4 py-3.5 text-center">
-                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold border ${health.cls}`}>{health.label}</span>
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold border ${status.cls}`}>{status.label}</span>
                                   </td>
                                   <td className="px-5 py-3.5">
                                     <div className="flex items-center justify-end gap-2">
@@ -2463,16 +2551,17 @@ export default function ClientDashboard() {
                         <thead>
                           <tr className="border-b border-slate-100 bg-slate-50/80">
                             <th className="text-left text-xs font-semibold text-slate-500 px-5 py-3 min-w-[160px]">Channel</th>
-                            <th className="text-left text-xs font-semibold text-slate-500 px-4 py-3 min-w-[160px]">Engagement Rate</th>
-                            <th className="text-right text-xs font-semibold text-slate-500 px-4 py-3">Engaged Sessions</th>
-                            <th className="text-left text-xs font-semibold text-slate-500 px-5 py-3 min-w-[140px]">Bounce Rate</th>
+                            <th className="text-left text-xs font-semibold text-slate-500 px-4 py-3 min-w-[140px]">Engagement Rate</th>
+                            <th className="text-left text-xs font-semibold text-slate-500 px-4 py-3 min-w-[140px]">Bounce Rate</th>
+                            <th className="text-left text-xs font-semibold text-slate-500 px-4 py-3 min-w-[140px]">Key Event Rate</th>
+                            <th className="text-right text-xs font-semibold text-slate-500 px-5 py-3">Avg Session Duration</th>
                           </tr>
                         </thead>
                         <tbody>
                           {channels.map((ch) => {
                             const eng = ch.engagementRate
                             const bounce = Math.max(0, 100 - eng)
-                            const engSess = Math.round(ch.sessions * eng / 100)
+                            const keyEventRate = ch.sessions > 0 ? (ch.conversions / ch.sessions) * 100 : 0
                             return (
                               <tr key={ch.channel} className="border-b border-slate-50 hover:bg-slate-50/60 transition-colors">
                                 <td className="px-5 py-3.5">
@@ -2489,8 +2578,7 @@ export default function ClientDashboard() {
                                     <span className={`text-xs font-semibold tabular-nums ${eng > 50 ? "text-emerald-600" : eng > 30 ? "text-amber-600" : "text-red-500"}`}>{Math.min(eng, 100).toFixed(0)}%</span>
                                   </div>
                                 </td>
-                                <td className="px-4 py-3.5 text-right text-xs text-slate-600 tabular-nums">{fmt(engSess)}</td>
-                                <td className="px-5 py-3.5">
+                                <td className="px-4 py-3.5">
                                   <div className="flex items-center gap-2.5">
                                     <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden" style={{ width: 80 }}>
                                       <div className="h-full rounded-full" style={{ width: `${bounce}%`, background: bounce < 30 ? "#10B981" : bounce < 60 ? "#F59E0B" : "#EF4444" }} />
@@ -2498,6 +2586,15 @@ export default function ClientDashboard() {
                                     <span className={`text-xs font-semibold tabular-nums ${bounce < 30 ? "text-emerald-600" : bounce < 60 ? "text-amber-600" : "text-red-500"}`}>{bounce.toFixed(0)}%</span>
                                   </div>
                                 </td>
+                                <td className="px-4 py-3.5">
+                                  <div className="flex items-center gap-2.5">
+                                    <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden" style={{ width: 80 }}>
+                                      <div className="h-full rounded-full" style={{ width: `${Math.min(100, keyEventRate * 4)}%`, background: keyEventRate > 10 ? "#10B981" : keyEventRate > 3 ? "#F59E0B" : "#EF4444" }} />
+                                    </div>
+                                    <span className={`text-xs font-semibold tabular-nums ${keyEventRate > 10 ? "text-emerald-600" : keyEventRate > 3 ? "text-amber-600" : "text-red-500"}`}>{keyEventRate.toFixed(1)}%</span>
+                                  </div>
+                                </td>
+                                <td className="px-5 py-3.5 text-right text-xs text-slate-600 tabular-nums">{fmtDur(ch.avgSessionDuration)}</td>
                               </tr>
                             )
                           })}
@@ -2525,69 +2622,52 @@ export default function ClientDashboard() {
                           {healthScore >= 70 ? "Performing Well" : healthScore >= 50 ? "Needs Attention" : "Underperforming"}
                         </div>
                       </div>
-                      {/* Three client-friendly blocks */}
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {/* Four client-friendly groups */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
 
-                        {/* Block 1: Your Audience */}
-                        <div className="bg-white/5 rounded-xl p-4">
-                          <div className="flex items-center gap-2 mb-3">
-                            <div className="w-6 h-6 rounded-lg bg-blue-500/20 flex items-center justify-center shrink-0">
-                              <svg className="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-                            </div>
-                            <span className="text-xs font-bold text-blue-400 uppercase tracking-wide">Your Audience</span>
-                          </div>
-                          <div className="text-3xl font-bold mb-0.5 tabular-nums">{fmt(totalChannelSessions)}</div>
-                          <div className="text-xs text-slate-400 mb-3 flex items-center gap-1.5 flex-wrap">
-                            <span>visitors this period</span>
-                            {prevTotal > 0 && (
-                              <span className={`font-bold ${totalChannelSessions >= prevTotal ? "text-emerald-400" : "text-red-400"}`}>
-                                {totalChannelSessions >= prevTotal ? "↑" : "↓"}{Math.abs(((totalChannelSessions - prevTotal) / prevTotal) * 100).toFixed(0)}% vs last period
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs text-slate-300 leading-relaxed">
-                            {top
-                              ? top.channel === "Direct"
-                                ? `${Math.round((top.sessions / (totalChannelSessions || 1)) * 100)}% of your visitors came directly — people who already know your brand, bookmarked your site, or typed your URL.`
-                                : top.channel === "Organic Search"
-                                ? `${Math.round((top.sessions / (totalChannelSessions || 1)) * 100)}% of your visitors found you on Google — people actively searching for what you offer. That's a strong signal.`
-                                : `${Math.round((top.sessions / (totalChannelSessions || 1)) * 100)}% of visitors came via ${top.channel}. See the channel table above for the full breakdown.`
-                              : "Connect Google Analytics to see where your visitors are coming from."}
-                          </p>
-                        </div>
-
-                        {/* Block 2: What's Working */}
+                        {/* Group 1: Key Wins */}
                         <div className="bg-white/5 rounded-xl p-4">
                           <div className="flex items-center gap-2 mb-3">
                             <div className="w-6 h-6 rounded-lg bg-emerald-500/20 flex items-center justify-center shrink-0">
                               <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
                             </div>
-                            <span className="text-xs font-bold text-emerald-400 uppercase tracking-wide">{"What's Working"}</span>
+                            <span className="text-xs font-bold text-emerald-400 uppercase tracking-wide">Key Wins</span>
                           </div>
                           <div className="space-y-2.5">
-                            {([
-                              organic && organic.engagementRate > 40
-                                ? `People finding you on Google are engaged (${organic.engagementRate.toFixed(0)}% engagement rate) — your content is attracting the right audience.`
-                                : null,
-                              direct && direct.sessions > 0
-                                ? `${fmt(direct.sessions)} people visited directly — strong brand recall and returning customer behaviour.`
-                                : null,
-                              channels.filter(c => c.sessions > 0 && c.engagementRate > 50).length > 0
-                                ? `${channels.filter(c => c.engagementRate > 50).slice(0, 2).map(c => c.channel).join(" and ")} visitors spend quality time on your site — they're genuinely interested.`
-                                : null,
-                            ] as (string | null)[]).filter((s): s is string => !!s).slice(0, 3).map((signal, i) => (
+                            {keyWins.map((w, i) => (
                               <div key={i} className="flex gap-2">
                                 <div className="w-4 h-4 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0 mt-0.5">
                                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                                 </div>
-                                <p className="text-xs text-slate-300 leading-relaxed">{signal}</p>
+                                <p className="text-xs text-slate-300 leading-relaxed">{w}</p>
                               </div>
                             ))}
-                            {channels.length === 0 && <p className="text-xs text-slate-400">Connect GA4 to see positive performance signals.</p>}
+                            {keyWins.length === 0 && <p className="text-xs text-slate-400">No standout wins this period — traffic is holding steady.</p>}
                           </div>
                         </div>
 
-                        {/* Block 3: What We're Doing */}
+                        {/* Group 2: Needs Attention */}
+                        <div className="bg-white/5 rounded-xl p-4">
+                          <div className="flex items-center gap-2 mb-3">
+                            <div className="w-6 h-6 rounded-lg bg-amber-500/20 flex items-center justify-center shrink-0">
+                              <svg className="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg>
+                            </div>
+                            <span className="text-xs font-bold text-amber-400 uppercase tracking-wide">Needs Attention</span>
+                          </div>
+                          <div className="space-y-2.5">
+                            {needsAttention.map((n, i) => (
+                              <div key={i} className="flex gap-2">
+                                <div className="w-4 h-4 rounded-full bg-amber-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                                </div>
+                                <p className="text-xs text-slate-300 leading-relaxed">{n}</p>
+                              </div>
+                            ))}
+                            {needsAttention.length === 0 && <p className="text-xs text-slate-400">Nothing needs urgent attention this period.</p>}
+                          </div>
+                        </div>
+
+                        {/* Group 3: What We're Doing */}
                         <div className="bg-white/5 rounded-xl p-4">
                           <div className="flex items-center gap-2 mb-3">
                             <div className="w-6 h-6 rounded-lg bg-purple-500/20 flex items-center justify-center shrink-0">
@@ -2596,20 +2676,30 @@ export default function ClientDashboard() {
                             <span className="text-xs font-bold text-purple-400 uppercase tracking-wide">{"What We're Doing"}</span>
                           </div>
                           <div className="space-y-2.5">
-                            {([
-                              declined.length > 0
-                                ? `Investigating why ${declined.slice(0, 2).map(c => c.channel).join(" and ")} traffic dropped and building a recovery plan to win it back.`
-                                : "Maintaining performance across all channels and identifying new growth opportunities.",
-                              organic && pct(organic.sessions, organic.prevSessions) !== null && ((pct(organic.sessions, organic.prevSessions) as number) < 0)
-                                ? "Reviewing your top Google landing pages and optimising them to recover and improve search rankings."
-                                : "Identifying new keyword opportunities to bring more high-intent visitors from Google.",
-                              avgEngRate < 50
-                                ? "Analysing pages where visitors leave quickly and improving them to keep people engaged longer."
-                                : "Focusing on converting your high-engagement audience into enquiries and leads.",
-                            ] as string[]).map((action, i) => (
+                            {whatWereDoing.map((action, i) => (
                               <div key={i} className="flex gap-2">
                                 <span className="text-purple-400 shrink-0 font-bold text-sm leading-none mt-0.5">→</span>
                                 <p className="text-xs text-slate-300 leading-relaxed">{action}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Group 4: Expected Impact */}
+                        <div className="bg-white/5 rounded-xl p-4">
+                          <div className="flex items-center gap-2 mb-3">
+                            <div className="w-6 h-6 rounded-lg bg-blue-500/20 flex items-center justify-center shrink-0">
+                              <svg className="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+                            </div>
+                            <span className="text-xs font-bold text-blue-400 uppercase tracking-wide">Expected Impact</span>
+                          </div>
+                          <div className="space-y-2.5">
+                            {expectedImpact.map((e, i) => (
+                              <div key={i} className="flex gap-2">
+                                <div className="w-4 h-4 rounded-full bg-blue-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                                </div>
+                                <p className="text-xs text-slate-300 leading-relaxed">{e}</p>
                               </div>
                             ))}
                           </div>
@@ -2648,6 +2738,7 @@ export default function ClientDashboard() {
                                 <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                                   <div className="h-full bg-slate-400 rounded-full" style={{ width: `${sp}%` }} />
                                 </div>
+                                <span className="text-xs text-slate-500 font-semibold tabular-nums w-9 text-right shrink-0">{sp.toFixed(0)}%</span>
                                 <span className="text-xs text-slate-400 tabular-nums w-10 text-right shrink-0">{fmt(c.sessions)}</span>
                               </div>
                             )
