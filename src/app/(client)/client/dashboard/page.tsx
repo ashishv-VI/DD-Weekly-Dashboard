@@ -2980,7 +2980,7 @@ export default function ClientDashboard() {
                     <div className="text-sm font-semibold text-slate-900 mb-4">AI vs Organic Traffic Comparison</div>
                     <div className="space-y-3">
                       {[
-                        { label: "Organic Search", sessions: channels.find(c => c.channel.toLowerCase().includes("organic"))?.sessions ?? 0, color: "#2563eb" },
+                        { label: "Organic Search", sessions: channels.find(c => c.channel.toLowerCase().includes("organic"))?.sessions ?? 0, color: "#10B981" },
                         { label: "AI Platforms", sessions: aiTraffic.total, color: "#7c3aed" },
                       ].map(item => {
                         const pctOfTotal = totalChannelSessions > 0 ? (item.sessions / totalChannelSessions) * 100 : 0
