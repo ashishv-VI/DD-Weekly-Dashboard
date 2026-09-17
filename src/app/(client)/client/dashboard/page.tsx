@@ -1686,6 +1686,12 @@ export default function ClientDashboard() {
       <style>{`
         @keyframes fadeInUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         .anim-card { animation: fadeInUp 0.35s ease-out forwards; }
+        @keyframes drawLine { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+        .chart-line { stroke-dasharray: 1; stroke-dashoffset: 1; animation: drawLine 1s cubic-bezier(.4,0,.2,1) forwards; }
+        @keyframes fadeInArea { from { opacity: 0; } to { opacity: 1; } }
+        .chart-area { opacity: 0; animation: fadeInArea 0.8s ease-out 0.5s forwards; }
+        @keyframes growDonut { from { stroke-dasharray: 0 999; } to { stroke-dasharray: var(--dash) var(--gap); } }
+        .donut-seg { stroke-dasharray: 0 999; animation: growDonut 0.9s cubic-bezier(.4,0,.2,1) forwards; }
       `}</style>
 
       {/* Header */}
@@ -2270,12 +2276,12 @@ export default function ClientDashboard() {
                             <text x="34" y={10 + (1 - v / maxY) * chartH} textAnchor="end" fontSize="9" fill="#94A3B8">{fmtK(v)}</text>
                           </g>
                         ))}
-                        <g transform="translate(38,6)">
-                          <path d={svgArea(totalTrend, maxY, chartW, chartH)} fill="#334155" fillOpacity="0.04" />
-                          <path d={svgLine(totalTrend, maxY, chartW, chartH)} fill="none" stroke="#334155" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                          <path d={svgLine(organicTrend, maxY, chartW, chartH)} fill="none" stroke="#10B981" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                          <path d={svgLine(directTrend, maxY, chartW, chartH)} fill="none" stroke="#3B82F6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                          <path d={svgLine(referralTrend, maxY, chartW, chartH)} fill="none" stroke="#F59E0B" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                        <g transform="translate(38,6)" key={trafficPeriod}>
+                          <path d={svgArea(totalTrend, maxY, chartW, chartH)} fill="#334155" fillOpacity="0.04" className="chart-area" />
+                          <path d={svgLine(totalTrend, maxY, chartW, chartH)} fill="none" stroke="#334155" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" pathLength={1} className="chart-line" style={{ animationDelay: "0s" }} />
+                          <path d={svgLine(organicTrend, maxY, chartW, chartH)} fill="none" stroke="#10B981" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" pathLength={1} className="chart-line" style={{ animationDelay: "0.1s" }} />
+                          <path d={svgLine(directTrend, maxY, chartW, chartH)} fill="none" stroke="#3B82F6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" pathLength={1} className="chart-line" style={{ animationDelay: "0.2s" }} />
+                          <path d={svgLine(referralTrend, maxY, chartW, chartH)} fill="none" stroke="#F59E0B" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" pathLength={1} className="chart-line" style={{ animationDelay: "0.3s" }} />
                         </g>
                         {[0, Math.floor(trendPts / 4), Math.floor(trendPts / 2), Math.floor(trendPts * 3 / 4), trendPts - 1].map((di, i) => {
                           const d = new Date(); d.setDate(d.getDate() - (trendPts - 1 - di))
@@ -2292,8 +2298,9 @@ export default function ClientDashboard() {
                         <svg viewBox="0 0 160 160" width="130" height="130">
                           <circle cx="80" cy="80" r="54" fill="none" stroke="#F1F5F9" strokeWidth="22" />
                           {donutSegments.map((seg, i) => (
-                            <circle key={i} cx="80" cy="80" r="54" fill="none" stroke={seg.color} strokeWidth="22"
-                              strokeDasharray={`${seg.dash} ${seg.gap}`} strokeDashoffset={seg.offset} transform="rotate(-90 80 80)" />
+                            <circle key={`${trafficPeriod}-${i}`} cx="80" cy="80" r="54" fill="none" stroke={seg.color} strokeWidth="22"
+                              strokeDashoffset={seg.offset} transform="rotate(-90 80 80)" className="donut-seg"
+                              style={{ "--dash": seg.dash, "--gap": seg.gap, animationDelay: `${i * 0.08}s` } as React.CSSProperties} />
                           ))}
                           <text x="80" y="75" textAnchor="middle" fontSize="17" fontWeight="bold" fill="#0F172A">{fmt(totalChannelSessions)}</text>
                           <text x="80" y="90" textAnchor="middle" fontSize="8.5" fill="#94A3B8">Total Sessions</text>
