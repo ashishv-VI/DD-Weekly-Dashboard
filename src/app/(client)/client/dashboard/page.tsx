@@ -2331,7 +2331,8 @@ export default function ClientDashboard() {
                   </div>
 
                   {/* ── Section 3+4: Trend + Distribution + Intelligence ── */}
-                  <div className="grid grid-cols-12 gap-4">
+                  {/* items-start: the Intelligence panel's content length varies, so it must not stretch the Trend/Distribution cards to match its height */}
+                  <div className="grid grid-cols-12 gap-4 items-start">
 
                     {/* Traffic Trend Chart */}
                     <div className="col-span-12 lg:col-span-7 bg-white border border-slate-200 rounded-xl p-5">
