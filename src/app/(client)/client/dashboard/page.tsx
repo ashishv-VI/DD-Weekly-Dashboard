@@ -14,7 +14,7 @@ interface DailyRow { date: string; clicks?: number; sessions?: number }
 interface KeywordRow { keyword: string; clicks: number; impressions: number; ctr: number; position: number }
 interface KeywordWithPage { keyword: string; page: string; clicks: number; impressions: number; ctr: number; position: number }
 interface PageRow { url: string; clicks: number; impressions: number; ctr: number; position: number }
-interface DeviceRow { device: string; sessions: number; users: number }
+interface DeviceRow { device: string; sessions: number; users: number; prevSessions: number }
 interface CountryRow { country: string; sessions: number; users: number }
 interface ChannelRow { channel: string; sessions: number; users: number; engagementRate: number; conversions: number; prevSessions: number; avgSessionDuration: number }
 interface AISourceRow { source: string; sessions: number; users: number; avgDuration: number; conversions: number }
@@ -61,6 +61,18 @@ function fmtDur(sec: number): string {
   if (!sec) return "—"
   const m = Math.floor(sec / 60), s = Math.floor(sec % 60)
   return m > 0 ? `${m}m ${s}s` : `${s}s`
+}
+
+const COUNTRY_FLAGS: Record<string, string> = {
+  "India": "🇮🇳", "United States": "🇺🇸", "United Kingdom": "🇬🇧", "Canada": "🇨🇦",
+  "Australia": "🇦🇺", "Singapore": "🇸🇬", "Philippines": "🇵🇭", "Argentina": "🇦🇷",
+  "Germany": "🇩🇪", "France": "🇫🇷", "Brazil": "🇧🇷", "Mexico": "🇲🇽", "Spain": "🇪🇸",
+  "Italy": "🇮🇹", "Netherlands": "🇳🇱", "United Arab Emirates": "🇦🇪", "South Africa": "🇿🇦",
+  "Pakistan": "🇵🇰", "Bangladesh": "🇧🇩", "Indonesia": "🇮🇩", "Malaysia": "🇲🇾",
+  "Japan": "🇯🇵", "China": "🇨🇳", "New Zealand": "🇳🇿",
+}
+function countryFlag(country: string): string {
+  return COUNTRY_FLAGS[country] ?? "🌐"
 }
 
 function pct(curr: number, prev: number): number {
@@ -2147,18 +2159,27 @@ export default function ClientDashboard() {
               const organic = channels.find(c => c.channel === "Organic Search")
               const direct = channels.find(c => c.channel === "Direct")
               const referral = channels.find(c => c.channel === "Referral")
+              const social = channels.find(c => c.channel === "Organic Social")
+              const aiAssistant = channels.find(c => c.channel === "AI Assistant")
               const prevTotal = channels.reduce((s, c) => s + c.prevSessions, 0)
               const engagedSessions = Math.round(channels.reduce((s, c) => s + c.sessions * (c.engagementRate / 100), 0))
               const prevEngaged = Math.round(channels.reduce((s, c) => s + c.prevSessions * (c.engagementRate / 100), 0))
               const avgEngRate = channels.length ? channels.reduce((s, c) => s + c.engagementRate, 0) / channels.length : 0
               const healthScore = Math.min(96, Math.round(avgEngRate * 0.65 + 32))
               const kpiCards = [
-                { label: "Total Sessions", value: totalChannelSessions, prev: prevTotal, color: "#334155", id: "total" },
-                { label: "Organic Sessions", value: organic?.sessions ?? 0, prev: organic?.prevSessions ?? 0, color: "#10B981", id: "organic" },
-                { label: "Direct Sessions", value: direct?.sessions ?? 0, prev: direct?.prevSessions ?? 0, color: "#3B82F6", id: "direct" },
-                { label: "Referral Sessions", value: referral?.sessions ?? 0, prev: referral?.prevSessions ?? 0, color: "#F59E0B", id: "referral" },
-                { label: "Engaged Sessions", value: engagedSessions, prev: prevEngaged, color: "#EC4899", id: "engaged" },
+                { label: "Total Sessions", value: totalChannelSessions, prev: prevTotal, color: "#334155", id: "total", icon: "users" as const },
+                { label: "Organic Sessions", value: organic?.sessions ?? 0, prev: organic?.prevSessions ?? 0, color: "#10B981", id: "organic", icon: "leaf" as const },
+                { label: "Direct Sessions", value: direct?.sessions ?? 0, prev: direct?.prevSessions ?? 0, color: "#3B82F6", id: "direct", icon: "cursor" as const },
+                { label: "Referral Sessions", value: referral?.sessions ?? 0, prev: referral?.prevSessions ?? 0, color: "#F59E0B", id: "referral", icon: "link" as const },
+                { label: "Engaged Sessions", value: engagedSessions, prev: prevEngaged, color: "#EC4899", id: "engaged", icon: "spark" as const },
               ]
+              const kpiIconPath: Record<string, string> = {
+                users: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75",
+                leaf: "M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.5 20 3c0 5-1 8.5-4 12-2 2.5-4.5 4-9 5Z M2 21c0-3 1.85-5.36 5.08-6",
+                cursor: "M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z",
+                link: "M9 17H7A5 5 0 0 1 7 7h2M15 7h2a5 5 0 1 1 0 10h-2M8 12h8",
+                spark: "M13 2 3 14h7l-1 8 10-12h-7l1-8z",
+              }
               // ── Trend chart ────────────────────────────────────────────
               const trendPts = trafficPeriod === "7D" ? 7 : trafficPeriod === "90D" ? 90 : 30
               const makeTrend = (prev: number, cur: number, seed: number) =>
@@ -2170,6 +2191,8 @@ export default function ClientDashboard() {
               const organicTrend = makeTrend(organic?.prevSessions ?? 0, organic?.sessions ?? 0, 1)
               const directTrend = makeTrend(direct?.prevSessions ?? 0, direct?.sessions ?? 0, 2)
               const referralTrend = makeTrend(referral?.prevSessions ?? 0, referral?.sessions ?? 0, 3)
+              const socialTrend = makeTrend(social?.prevSessions ?? 0, social?.sessions ?? 0, 4)
+              const aiAssistantTrend = makeTrend(aiAssistant?.prevSessions ?? 0, aiAssistant?.sessions ?? 0, 5)
               const chartW = 520, chartH = 170
               const maxY = Math.max(...totalTrend, 1) * 1.12
               const yTicks = [0, Math.round(maxY * 0.33), Math.round(maxY * 0.67), Math.round(maxY)]
@@ -2191,32 +2214,32 @@ export default function ClientDashboard() {
               const referralPctChange = referral && referral.prevSessions > 0 ? pct(referral.sessions, referral.prevSessions) : null
               // Direct share above this is unusual enough to flag as a possible tracking gap
               const directShare = direct && totalChannelSessions ? (direct.sessions / totalChannelSessions) * 100 : 0
-              const insights: { text: string; tone: "good" | "warn" | "bad" }[] = [
-                top ? { text: `${top.channel} is your top channel — ${totalChannelSessions ? Math.round((top.sessions / totalChannelSessions) * 100) : 0}% of your ${fmt(totalChannelSessions)} sessions came from there, with a ${top.engagementRate.toFixed(0)}% engagement rate.`, tone: "good" } : null,
+              const insights: { title: string; detail: string; tone: "good" | "warn" | "bad" }[] = [
+                top ? { title: `${top.channel} is your top channel`, detail: `${totalChannelSessions ? Math.round((top.sessions / totalChannelSessions) * 100) : 0}% of your ${fmt(totalChannelSessions)} sessions came from there, with a ${top.engagementRate.toFixed(0)}% engagement rate.`, tone: "good" } : null,
                 organic && organic.engagementRate > 50
-                  ? { text: `Organic Search engagement is strong at ${organic.engagementRate.toFixed(0)}% — visitors finding you on Google are sticking around, a sign your content matches what they're searching for.`, tone: "good" }
-                  : organic ? { text: `Organic Search engagement is only ${organic.engagementRate.toFixed(0)}% — visitors land from Google but leave quickly, so the top organic pages likely need stronger content or a clearer next step.`, tone: "warn" } : null,
+                  ? { title: "Organic engagement is strong", detail: `${organic.engagementRate.toFixed(0)}% engagement — visitors finding you on Google are sticking around, a sign your content matches what they're searching for.`, tone: "good" }
+                  : organic ? { title: "Organic engagement needs work", detail: `Only ${organic.engagementRate.toFixed(0)}% engagement — visitors land from Google but leave quickly, so the top organic pages likely need stronger content or a clearer next step.`, tone: "warn" } : null,
                 declined.length > 0
-                  ? { text: `${declined.slice(0, 2).map(c => c.channel).join(" and ")} ${declined.length > 1 ? "are" : "is"} down this period — worth checking what changed before it compounds.`, tone: "bad" }
-                  : { text: "All channels are holding steady or growing this period — nothing needs urgent attention right now.", tone: "good" },
+                  ? { title: `${declined.slice(0, 2).map(c => c.channel).join(" and ")} traffic declining`, detail: "Worth checking what changed before it compounds.", tone: "bad" }
+                  : { title: "All channels holding steady", detail: "Nothing needs urgent attention right now.", tone: "good" },
                 directShare > 60
-                  ? { text: `Direct traffic is unusually high at ${Math.round(directShare)}% of all sessions. That can be genuine brand recall, but it's also what happens when campaign links are missing UTM tags — worth a quick attribution check.`, tone: "warn" }
+                  ? { title: "Direct traffic unusually high", detail: `${Math.round(directShare)}% of all sessions are Direct. That can be genuine brand recall, but it's also what happens when campaign links are missing UTM tags — worth a quick attribution check.`, tone: "warn" }
                   : null,
-              ].filter((i): i is { text: string; tone: "good" | "warn" | "bad" } => i !== null)
-              const actions: string[] = [
+              ].filter((i): i is { title: string; detail: string; tone: "good" | "warn" | "bad" } => i !== null)
+              const actions: { title: string; detail: string }[] = [
                 organicPctChange !== null && organicPctChange < -3
-                  ? `Audit organic landing pages — organic sessions dropped ${Math.abs(organicPctChange).toFixed(1)}% this period, so we'll review the top pages for ranking or content issues.`
-                  : "",
+                  ? { title: "Audit organic landing pages", detail: `Organic sessions dropped ${Math.abs(organicPctChange).toFixed(1)}% this period, so we'll review the top pages for ranking or content issues.` }
+                  : null,
                 referralPctChange !== null && referralPctChange < -15
-                  ? `Rebuild referral sources — referral traffic fell ${Math.abs(referralPctChange).toFixed(1)}%, so we'll check for broken backlinks and lapsed partnerships.`
-                  : "",
+                  ? { title: "Rebuild referral sources", detail: `Referral traffic fell ${Math.abs(referralPctChange).toFixed(1)}%, so we'll check for broken backlinks and lapsed partnerships.` }
+                  : null,
                 avgEngRate < 45
-                  ? `Improve on-page engagement — average engagement across channels is ${avgEngRate.toFixed(0)}%, so we'll review page speed, calls-to-action and content relevance on the pages losing visitors fastest.`
-                  : "",
+                  ? { title: "Improve on-page engagement", detail: `Average engagement across channels is ${avgEngRate.toFixed(0)}%, so we'll review page speed, calls-to-action and content relevance on the pages losing visitors fastest.` }
+                  : null,
                 directShare > 50
-                  ? `Audit direct traffic attribution — Direct accounts for ${Math.round(directShare)}% of sessions, so we'll check UTM tagging and campaign links to confirm it's genuine direct traffic and not under-tracked campaigns.`
-                  : "Monitor direct traffic — track branded vs non-branded search share to see how much of Direct reflects real brand recall.",
-              ].filter(Boolean)
+                  ? { title: "Audit direct traffic attribution", detail: `Direct accounts for ${Math.round(directShare)}% of sessions, so we'll check UTM tagging and campaign links to confirm it's genuine direct traffic.` }
+                  : { title: "Monitor direct traffic", detail: "Track branded vs non-branded search share to see how much of Direct reflects real brand recall." },
+              ].filter((a): a is { title: string; detail: string } => a !== null)
               // Dynamic opportunities — only shown when the underlying condition is actually true;
               // impact is only quantified when it's derivable from real session data, otherwise "To be evaluated".
               const dynOpps: { title: string; reason: string; impact: string; priority: string; pc: string }[] = [
@@ -2311,8 +2334,10 @@ export default function ClientDashboard() {
                       const change = card.prev > 0 ? ((card.value - card.prev) / card.prev) * 100 : null
                       return (
                         <div key={card.id} className="bg-white border border-slate-200 rounded-xl p-4 hover:shadow-md hover:border-slate-300 transition-all cursor-default group">
-                          <div className="flex items-center gap-1.5 mb-2">
-                            <div className="w-2 h-2 rounded-full shrink-0" style={{ background: card.color }} />
+                          <div className="flex items-center gap-2 mb-2.5">
+                            <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${card.color}18` }}>
+                              <svg className="w-3.5 h-3.5" fill="none" stroke={card.color} viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={kpiIconPath[card.icon]} /></svg>
+                            </div>
                             <div className="text-xs text-slate-500 font-medium leading-tight">{card.label}</div>
                           </div>
                           <div className="text-2xl font-bold text-slate-900 tabular-nums mb-0.5">{fmt(card.value)}</div>
@@ -2340,7 +2365,7 @@ export default function ClientDashboard() {
                         <div>
                           <div className="text-sm font-semibold text-slate-900">Traffic Trend</div>
                           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2">
-                            {[{ label: "Total Sessions", color: "#334155" }, { label: "Organic Search", color: "#10B981" }, { label: "Direct", color: "#3B82F6" }, { label: "Referral", color: "#F59E0B" }].map(l => (
+                            {[{ label: "Total", color: "#334155" }, { label: "Organic Search", color: "#10B981" }, { label: "Direct", color: "#3B82F6" }, { label: "Referral", color: "#F59E0B" }, { label: "Social", color: "#EC4899" }, { label: "AI Assistant", color: "#06B6D4" }].map(l => (
                               <div key={l.label} className="flex items-center gap-1.5">
                                 <div className="w-3 h-0.5 rounded" style={{ background: l.color }} />
                                 <span className="text-xs text-slate-500">{l.label}</span>
@@ -2368,6 +2393,8 @@ export default function ClientDashboard() {
                           <path d={svgLine(organicTrend, maxY, chartW, chartH)} fill="none" stroke="#10B981" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" pathLength={1} className="chart-line" style={{ animationDelay: "0.1s" }} />
                           <path d={svgLine(directTrend, maxY, chartW, chartH)} fill="none" stroke="#3B82F6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" pathLength={1} className="chart-line" style={{ animationDelay: "0.2s" }} />
                           <path d={svgLine(referralTrend, maxY, chartW, chartH)} fill="none" stroke="#F59E0B" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" pathLength={1} className="chart-line" style={{ animationDelay: "0.3s" }} />
+                          <path d={svgLine(socialTrend, maxY, chartW, chartH)} fill="none" stroke="#EC4899" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" pathLength={1} className="chart-line" style={{ animationDelay: "0.4s" }} />
+                          <path d={svgLine(aiAssistantTrend, maxY, chartW, chartH)} fill="none" stroke="#06B6D4" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" pathLength={1} className="chart-line" style={{ animationDelay: "0.5s" }} />
                         </g>
                         {[0, Math.floor(trendPts / 4), Math.floor(trendPts / 2), Math.floor(trendPts * 3 / 4), trendPts - 1].map((di, i) => {
                           const d = new Date(); d.setDate(d.getDate() - (trendPts - 1 - di))
@@ -2412,13 +2439,22 @@ export default function ClientDashboard() {
                           <svg className="w-3.5 h-3.5 text-purple-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/></svg>
                           <span className="text-xs font-bold text-purple-600 uppercase tracking-wide">Key Insights</span>
                         </div>
-                        <div className="space-y-2.5">
+                        <div className="space-y-3">
                           {insights.map((ins, i) => (
                             <div key={i} className="flex gap-2">
-                              <div className={`w-3.5 h-3.5 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${ins.tone === "good" ? "bg-emerald-100" : ins.tone === "warn" ? "bg-amber-100" : "bg-red-100"}`}>
-                                <div className={`w-1.5 h-1.5 rounded-full ${ins.tone === "good" ? "bg-emerald-500" : ins.tone === "warn" ? "bg-amber-500" : "bg-red-500"}`} />
+                              <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${ins.tone === "good" ? "bg-emerald-100" : ins.tone === "warn" ? "bg-amber-100" : "bg-red-100"}`}>
+                                {ins.tone === "good" ? (
+                                  <svg className="w-3 h-3 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 12l5 5L20 7" /></svg>
+                                ) : ins.tone === "warn" ? (
+                                  <svg className="w-3 h-3 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.3 3.9 2 18a1.5 1.5 0 0 0 1.3 2.2h17.4A1.5 1.5 0 0 0 22 18L13.7 3.9a1.5 1.5 0 0 0-2.6 0Z" /></svg>
+                                ) : (
+                                  <svg className="w-3 h-3 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.3 3.9 2 18a1.5 1.5 0 0 0 1.3 2.2h17.4A1.5 1.5 0 0 0 22 18L13.7 3.9a1.5 1.5 0 0 0-2.6 0Z" /></svg>
+                                )}
                               </div>
-                              <p className="text-xs text-slate-600 leading-relaxed">{ins.text}</p>
+                              <div>
+                                <p className="text-xs font-semibold text-slate-800 leading-snug">{ins.title}</p>
+                                <p className="text-xs text-slate-500 leading-relaxed mt-0.5">{ins.detail}</p>
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -2429,11 +2465,14 @@ export default function ClientDashboard() {
                           <svg className="w-3.5 h-3.5 text-blue-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
                           <span className="text-xs font-bold text-blue-600 uppercase tracking-wide">Recommended Actions</span>
                         </div>
-                        <div className="space-y-2">
+                        <div className="space-y-3">
                           {actions.slice(0, 4).map((a, i) => (
-                            <div key={i} className="flex gap-1.5">
-                              <span className="text-slate-400 text-xs shrink-0 mt-0.5">›</span>
-                              <p className="text-xs text-slate-600 leading-relaxed">{a}</p>
+                            <div key={i} className="flex gap-2">
+                              <div className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{i + 1}</div>
+                              <div>
+                                <p className="text-xs font-semibold text-slate-800 leading-snug">{a.title}</p>
+                                <p className="text-xs text-slate-500 leading-relaxed mt-0.5">{a.detail}</p>
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -2623,8 +2662,8 @@ export default function ClientDashboard() {
                           {healthScore >= 70 ? "Performing Well" : healthScore >= 50 ? "Needs Attention" : "Underperforming"}
                         </div>
                       </div>
-                      {/* Four client-friendly groups */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                      {/* Four client-friendly groups + headline stat */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
 
                         {/* Group 1: Key Wins */}
                         <div className="bg-white/5 rounded-xl p-4">
@@ -2637,9 +2676,7 @@ export default function ClientDashboard() {
                           <div className="space-y-2.5">
                             {keyWins.map((w, i) => (
                               <div key={i} className="flex gap-2">
-                                <div className="w-4 h-4 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0 mt-0.5">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                                </div>
+                                <svg className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 12l5 5L20 7" /></svg>
                                 <p className="text-xs text-slate-300 leading-relaxed">{w}</p>
                               </div>
                             ))}
@@ -2658,9 +2695,7 @@ export default function ClientDashboard() {
                           <div className="space-y-2.5">
                             {needsAttention.map((n, i) => (
                               <div key={i} className="flex gap-2">
-                                <div className="w-4 h-4 rounded-full bg-amber-500/20 flex items-center justify-center shrink-0 mt-0.5">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                                </div>
+                                <svg className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.3 3.9 2 18a1.5 1.5 0 0 0 1.3 2.2h17.4A1.5 1.5 0 0 0 22 18L13.7 3.9a1.5 1.5 0 0 0-2.6 0Z" /></svg>
                                 <p className="text-xs text-slate-300 leading-relaxed">{n}</p>
                               </div>
                             ))}
@@ -2679,7 +2714,7 @@ export default function ClientDashboard() {
                           <div className="space-y-2.5">
                             {whatWereDoing.map((action, i) => (
                               <div key={i} className="flex gap-2">
-                                <span className="text-purple-400 shrink-0 font-bold text-sm leading-none mt-0.5">→</span>
+                                <svg className="w-3.5 h-3.5 text-purple-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>
                                 <p className="text-xs text-slate-300 leading-relaxed">{action}</p>
                               </div>
                             ))}
@@ -2697,32 +2732,56 @@ export default function ClientDashboard() {
                           <div className="space-y-2.5">
                             {expectedImpact.map((e, i) => (
                               <div key={i} className="flex gap-2">
-                                <div className="w-4 h-4 rounded-full bg-blue-500/20 flex items-center justify-center shrink-0 mt-0.5">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-blue-400" />
-                                </div>
+                                <svg className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
                                 <p className="text-xs text-slate-300 leading-relaxed">{e}</p>
                               </div>
                             ))}
                           </div>
                         </div>
 
+                        {/* Group 5: Headline stat */}
+                        <div className="bg-white/5 rounded-xl p-4 flex flex-col justify-between">
+                          <div>
+                            <div className="text-2xl font-bold tabular-nums">{fmt(totalChannelSessions)}</div>
+                            <div className={`text-xs font-bold flex items-center gap-1 mt-1 ${totalChannelSessions >= prevTotal ? "text-emerald-400" : "text-red-400"}`}>
+                              {prevTotal > 0 && <>{totalChannelSessions >= prevTotal ? "↑" : "↓"}{Math.abs(((totalChannelSessions - prevTotal) / prevTotal) * 100).toFixed(1)}% vs last period</>}
+                            </div>
+                            <div className="text-xs text-slate-400 mt-0.5">Total sessions</div>
+                          </div>
+                          <p className="text-xs text-slate-300 leading-relaxed mt-3 italic">
+                            {declined.length > 0
+                              ? `Focus this period: recovering ${declined[0].channel} traffic.`
+                              : avgEngRate < 50
+                              ? "Focus this period: improving engagement across channels."
+                              : "Traffic is growing well — let's keep building on it."}
+                          </p>
+                        </div>
+
                       </div>
                     </div>
                     <div className="bg-white border border-slate-200 rounded-xl p-5">
                       <div className="text-sm font-semibold text-slate-900 mb-3">Device Breakdown</div>
-                      <div className="space-y-2.5">
+                      <div className="space-y-3">
                         {devices.map(d => {
                           const t = devices.reduce((s, x) => s + x.sessions, 0)
                           const sp = t ? (d.sessions / t) * 100 : 0
-                          const devIcons: Record<string, string> = { desktop: "🖥️", mobile: "📱", tablet: "📲" }
+                          const devChange = d.prevSessions > 0 ? pct(d.sessions, d.prevSessions) : null
+                          const devIconPath: Record<string, string> = {
+                            desktop: "M4 4h16v11H4zM8 20h8M12 15v5",
+                            mobile: "M8 2h8a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1ZM11 18h2",
+                            tablet: "M5 3h14a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1ZM11 18h2",
+                          }
                           return (
                             <div key={d.device} className="flex items-center gap-2.5">
-                              <span className="text-sm w-5 shrink-0">{devIcons[d.device.toLowerCase()] ?? "💻"}</span>
+                              <svg className="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={devIconPath[d.device.toLowerCase()] ?? devIconPath.desktop} /></svg>
                               <span className="text-xs w-12 capitalize text-slate-600 font-medium shrink-0">{d.device}</span>
                               <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                                 <div className="h-full rounded-full" style={{ width: `${sp}%`, background: brand }} />
                               </div>
-                              <span className="text-xs text-slate-500 tabular-nums w-7 text-right shrink-0">{sp.toFixed(0)}%</span>
+                              <span className="text-xs text-slate-500 font-semibold tabular-nums w-9 text-right shrink-0">{sp.toFixed(0)}%</span>
+                              {devChange !== null ? (
+                                <span className={`text-xs font-semibold tabular-nums w-10 text-right shrink-0 ${devChange >= 0 ? "text-emerald-600" : "text-red-500"}`}>{devChange >= 0 ? "↑" : "↓"}{Math.abs(devChange).toFixed(0)}%</span>
+                              ) : <span className="text-xs text-slate-300 w-10 text-right shrink-0">—</span>}
                             </div>
                           )
                         })}
@@ -2735,7 +2794,8 @@ export default function ClientDashboard() {
                             const sp = t ? (c.sessions / t) * 100 : 0
                             return (
                               <div key={c.country} className="flex items-center gap-2">
-                                <span className="text-xs text-slate-600 font-medium truncate" style={{ width: 90 }}>{c.country}</span>
+                                <span className="text-sm shrink-0">{countryFlag(c.country)}</span>
+                                <span className="text-xs text-slate-600 font-medium truncate" style={{ width: 76 }}>{c.country}</span>
                                 <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                                   <div className="h-full bg-slate-400 rounded-full" style={{ width: `${sp}%` }} />
                                 </div>
