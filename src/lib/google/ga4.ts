@@ -120,20 +120,39 @@ export async function getDeviceBreakdown(
   endDate: string,
 ) {
   const client = getAnalyticsClient(accessToken)
-  const res = await client.properties.runReport({
-    property: `properties/${propertyId}`,
-    requestBody: {
-      dateRanges: [{ startDate, endDate }],
-      dimensions: [{ name: "deviceCategory" }],
-      metrics: [{ name: "sessions" }, { name: "totalUsers" }],
-      orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
-    },
+  const prev = shiftDateRange(startDate, endDate)
+  const [currRes, prevRes] = await Promise.all([
+    client.properties.runReport({
+      property: `properties/${propertyId}`,
+      requestBody: {
+        dateRanges: [{ startDate, endDate }],
+        dimensions: [{ name: "deviceCategory" }],
+        metrics: [{ name: "sessions" }, { name: "totalUsers" }],
+        orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
+      },
+    }),
+    client.properties.runReport({
+      property: `properties/${propertyId}`,
+      requestBody: {
+        dateRanges: [{ startDate: prev.start, endDate: prev.end }],
+        dimensions: [{ name: "deviceCategory" }],
+        metrics: [{ name: "sessions" }],
+      },
+    }),
+  ])
+  const prevMap = new Map<string, number>()
+  for (const r of prevRes.data.rows ?? []) {
+    prevMap.set(r.dimensionValues?.[0]?.value ?? "", Number(r.metricValues?.[0]?.value ?? 0))
+  }
+  return (currRes.data.rows ?? []).map((r) => {
+    const device = r.dimensionValues?.[0]?.value ?? "Unknown"
+    return {
+      device,
+      sessions: Number(r.metricValues?.[0]?.value ?? 0),
+      users: Number(r.metricValues?.[1]?.value ?? 0),
+      prevSessions: prevMap.get(device) ?? 0,
+    }
   })
-  return (res.data.rows ?? []).map((r) => ({
-    device: r.dimensionValues?.[0]?.value ?? "Unknown",
-    sessions: Number(r.metricValues?.[0]?.value ?? 0),
-    users: Number(r.metricValues?.[1]?.value ?? 0),
-  }))
 }
 
 export async function getCountryTraffic(
@@ -166,6 +185,7 @@ export interface ChannelRow {
   engagementRate: number
   conversions: number
   prevSessions: number
+  avgSessionDuration: number
 }
 
 export async function getTrafficByChannel(
@@ -188,6 +208,7 @@ export async function getTrafficByChannel(
           { name: "totalUsers" },
           { name: "engagementRate" },
           { name: "conversions" },
+          { name: "averageSessionDuration" },
         ],
         orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
       },
@@ -217,6 +238,7 @@ export async function getTrafficByChannel(
       engagementRate: Number(r.metricValues?.[2]?.value ?? 0) * 100,
       conversions: Number(r.metricValues?.[3]?.value ?? 0),
       prevSessions: prevMap.get(ch) ?? 0,
+      avgSessionDuration: Number(r.metricValues?.[4]?.value ?? 0),
     }
   })
 }
