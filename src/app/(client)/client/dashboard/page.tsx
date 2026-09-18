@@ -1311,6 +1311,7 @@ export default function ClientDashboard() {
   const [customEnd, setCustomEnd] = useState("")
   const [activeTab, setActiveTab] = useState<TabKey>("overview")
   const [trafficSelectedKpi, setTrafficSelectedKpi] = useState<string | null>(null)
+  const [trafficHoverIdx, setTrafficHoverIdx] = useState<number | null>(null)
   const [pagespeed, setPagespeed] = useState<PageSpeedData | null>(null)
   const [psLoading, setPsLoading] = useState(false)
   const [psError, setPsError] = useState(false)
@@ -2312,7 +2313,7 @@ export default function ClientDashboard() {
                               ))}
                             </div>
                           </div>
-                          <svg viewBox={`0 0 ${chartW + 46} ${chartH + 28}`} className="w-full" style={{ height: 200 }}>
+                          <svg viewBox={`0 0 ${chartW + 46} ${chartH + 28}`} className="w-full" style={{ height: 200, cursor: "crosshair" }} onMouseMove={(e) => { const rect = e.currentTarget.getBoundingClientRect(); const chartX = ((e.clientX - rect.left) / rect.width) * (chartW + 46) - 38; if (chartX < 0 || chartX > chartW) { setTrafficHoverIdx(null); return }; setTrafficHoverIdx(Math.min(trendPts - 1, Math.max(0, Math.round((chartX / chartW) * (trendPts - 1))))) }} onMouseLeave={() => setTrafficHoverIdx(null)}>
                             {yTicks.map((v, i) => (
                               <g key={i}>
                                 <line x1="38" y1={6 + (1 - v / maxY) * chartH} x2={chartW + 38} y2={6 + (1 - v / maxY) * chartH} stroke="#F1F5F9" strokeWidth="1" />
@@ -2358,6 +2359,59 @@ export default function ClientDashboard() {
                                 )
                               })()}
                             </g>
+                            {/* Hover crosshair + tooltip */}
+                            {trafficHoverIdx !== null && (() => {
+                              const hi = trafficHoverIdx
+                              const hx = 38 + (hi / (trendPts - 1)) * chartW
+                              const hoverTrends: Record<string, number[]> = { total: totalTrend, organic: organicTrend, direct: directTrend, referral: referralTrend, social: socialTrend, ai: aiTrend }
+                              const allCh = [
+                                { id: "total", label: "Total", color: "#334155" },
+                                { id: "organic", label: "Organic", color: "#10B981" },
+                                { id: "direct", label: "Direct", color: "#3B82F6" },
+                                { id: "referral", label: "Referral", color: "#F59E0B" },
+                                ...((social?.sessions ?? 0) > 0 ? [{ id: "social", label: "Social", color: "#EC4899" }] : []),
+                                ...((aiCh?.sessions ?? 0) > 0 ? [{ id: "ai", label: "AI", color: "#06B6D4" }] : []),
+                              ].filter(c => ((hoverTrends[c.id] ?? [])[hi] ?? 0) >= 1)
+                              const startDate = new Date(); startDate.setDate(startDate.getDate() - (trendPts - 1))
+                              const startStr = startDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+                              const hDate = new Date(); hDate.setDate(hDate.getDate() - (trendPts - 1 - hi))
+                              const dateStr = hDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+                              const rowH = 22
+                              const ttW = 175
+                              const ttH = 30 + allCh.length * rowH + 10
+                              const isRight = hi > trendPts * 0.55
+                              const ttX = isRight ? hx - ttW - 14 : hx + 14
+                              const ttY = 6
+                              return (
+                                <g>
+                                  <line x1={hx} y1="6" x2={hx} y2={6 + chartH} stroke="#94A3B8" strokeWidth="1" strokeDasharray="3 2" />
+                                  {allCh.map(ch => {
+                                    const tr = hoverTrends[ch.id] ?? []
+                                    const cy = 6 + (1 - Math.min(tr[hi] ?? 0, maxY) / maxY) * chartH
+                                    return <circle key={ch.id} cx={hx} cy={cy} r={selKpi === ch.id ? 5.5 : 4} fill={ch.color} stroke="white" strokeWidth="2" />
+                                  })}
+                                  <rect x={ttX} y={ttY} width={ttW} height={ttH} rx="8" fill="white" stroke="#E2E8F0" strokeWidth="1.5" />
+                                  <line x1={ttX + 1} y1={ttY + 26} x2={ttX + ttW - 1} y2={ttY + 26} stroke="#F1F5F9" strokeWidth="1" />
+                                  <text x={ttX + 10} y={ttY + 18} fontSize="10" fontWeight="bold" fill="#334155">{dateStr}</text>
+                                  <text x={ttX + ttW - 10} y={ttY + 18} textAnchor="end" fontSize="8" fill="#94A3B8">vs {startStr}</text>
+                                  {allCh.map((ch, i) => {
+                                    const tr = hoverTrends[ch.id] ?? []
+                                    const v = tr[hi] ?? 0
+                                    const base = tr[0] ?? 0
+                                    const chg = base > 1 ? ((v - base) / base) * 100 : null
+                                    const isSel = selKpi === ch.id
+                                    return (
+                                      <g key={ch.id}>
+                                        <circle cx={ttX + 11} cy={ttY + 32 + i * rowH + 5} r="3.5" fill={ch.color} />
+                                        <text x={ttX + 21} y={ttY + 38 + i * rowH} fontSize="9" fill={isSel ? "#0F172A" : "#64748B"} fontWeight={isSel ? "bold" : "normal"}>{ch.label}</text>
+                                        <text x={ttX + ttW - 10} y={ttY + 38 + i * rowH} textAnchor="end" fontSize="9" fontWeight="bold" fill="#0F172A">{fmt(Math.round(v))}</text>
+                                        {chg !== null && <text x={ttX + ttW - 52} y={ttY + 38 + i * rowH} textAnchor="end" fontSize="8" fill={chg > 2 ? "#10B981" : chg < -2 ? "#EF4444" : "#94A3B8"}>{chg > 2 ? "↑" : chg < -2 ? "↓" : "–"}{Math.abs(chg).toFixed(0)}%</text>}
+                                      </g>
+                                    )
+                                  })}
+                                </g>
+                              )
+                            })()}
                             {[0, Math.floor(trendPts / 4), Math.floor(trendPts / 2), Math.floor(trendPts * 3 / 4), trendPts - 1].map((di, i) => {
                               const d = new Date(); d.setDate(d.getDate() - (trendPts - 1 - di))
                               return <text key={i} x={38 + (di / (trendPts - 1)) * chartW} y={chartH + 22} textAnchor="middle" fontSize="9" fill="#94A3B8">{d.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</text>
