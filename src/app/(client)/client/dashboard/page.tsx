@@ -2400,68 +2400,99 @@ export default function ClientDashboard() {
                         </div>
                       </div>
 
-                      {/* Traffic Channel Performance table */}
+                      {/* Channel Breakdown — merged, client-friendly */}
                       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
                         <div className="px-5 py-4 border-b border-slate-100">
-                          <div className="text-sm font-semibold text-slate-900">Traffic Channel Performance</div>
-                          <div className="text-xs text-slate-400 mt-0.5">Compare key metrics across channels to understand quality and growth.</div>
+                          <div className="flex items-start justify-between gap-3 flex-wrap">
+                            <div>
+                              <div className="text-sm font-semibold text-slate-900">Where Your Traffic Comes From</div>
+                              <div className="text-xs text-slate-400 mt-0.5">Which channels bring visitors, how interested they are, and whether that's improving.</div>
+                            </div>
+                            <div className="flex items-center gap-3 text-xs text-slate-400 shrink-0 flex-wrap">
+                              <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-emerald-500" /><span>Good (&gt;50%)</span></div>
+                              <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-amber-400" /><span>Fair (30–50%)</span></div>
+                              <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-red-400" /><span>Low (&lt;30%)</span></div>
+                            </div>
+                          </div>
                         </div>
                         {channels.length === 0 ? (
                           <div className="py-12 text-center text-sm text-slate-400">No channel data available for this period</div>
                         ) : (
+                          <>
                           <div className="overflow-x-auto">
                             <table className="w-full">
                               <thead>
                                 <tr className="border-b border-slate-100 bg-slate-50/80">
                                   <th className="text-left text-xs font-semibold text-slate-500 px-5 py-3 min-w-[160px]">Channel</th>
-                                  <th className="text-right text-xs font-semibold text-slate-500 px-4 py-3">Sessions ↓</th>
-                                  <th className="text-right text-xs font-semibold text-slate-500 px-4 py-3">Change</th>
-                                  <th className="text-right text-xs font-semibold text-slate-500 px-4 py-3">Engagement Rate</th>
-                                  <th className="text-right text-xs font-semibold text-slate-500 px-4 py-3">Bounce Rate</th>
-                                  <th className="text-right text-xs font-semibold text-slate-500 px-4 py-3">Key Events</th>
-                                  <th className="text-center text-xs font-semibold text-slate-500 px-4 py-3">Status</th>
+                                  <th className="text-right text-xs font-semibold text-slate-500 px-4 py-3">
+                                    <div>Visitors</div>
+                                    <div className="text-[10px] font-normal text-slate-400 mt-0.5">Total this period</div>
+                                  </th>
+                                  <th className="text-right text-xs font-semibold text-slate-500 px-4 py-3">
+                                    <div>vs Last Period</div>
+                                    <div className="text-[10px] font-normal text-slate-400 mt-0.5">Growing or shrinking?</div>
+                                  </th>
+                                  <th className="text-left text-xs font-semibold text-slate-500 px-4 py-3 min-w-[160px]">
+                                    <div>Visitor Quality</div>
+                                    <div className="text-[10px] font-normal text-slate-400 mt-0.5">Did they stay &amp; engage?</div>
+                                  </th>
+                                  <th className="text-right text-xs font-semibold text-slate-500 px-4 py-3">
+                                    <div>Engaged Visitors</div>
+                                    <div className="text-[10px] font-normal text-slate-400 mt-0.5">Who actually interacted</div>
+                                  </th>
+                                  <th className="text-center text-xs font-semibold text-slate-500 px-4 py-3">
+                                    <div>Health</div>
+                                    <div className="text-[10px] font-normal text-slate-400 mt-0.5">Quick summary</div>
+                                  </th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {channels.map((ch) => {
                                   const change = ch.prevSessions > 0 ? pct(ch.sessions, ch.prevSessions) : null
-                                  const bounce = Math.max(0, 100 - ch.engagementRate)
+                                  const eng = Math.min(ch.engagementRate, 100)
+                                  const engSess = Math.round(ch.sessions * eng / 100)
                                   const badge = statusBadge(ch, totalChannelSessions)
+                                  const qualityLabel = eng > 50 ? "Good" : eng > 30 ? "Fair" : eng === 0 ? "—" : "Low"
+                                  const qualityColor = eng > 50 ? "#10B981" : eng > 30 ? "#F59E0B" : eng === 0 ? "#CBD5E1" : "#EF4444"
                                   return (
-                                    <tr key={ch.channel} className="border-b border-slate-50 hover:bg-blue-50/30 transition-colors">
-                                      <td className="px-5 py-3.5">
+                                    <tr key={ch.channel} className="border-b border-slate-50 hover:bg-blue-50/30 transition-colors group">
+                                      <td className="px-5 py-4">
                                         <div className="flex items-center gap-2.5">
                                           <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${chColor(ch.channel)}18` }}>
                                             <div className="w-2.5 h-2.5 rounded-full" style={{ background: chColor(ch.channel) }} />
                                           </div>
-                                          <span className="text-xs font-semibold text-slate-800">{ch.channel}</span>
-                                        </div>
-                                      </td>
-                                      <td className="px-4 py-3.5 text-right text-xs font-bold text-slate-800 tabular-nums">{fmt(ch.sessions)}</td>
-                                      <td className="px-4 py-3.5 text-right">
-                                        {change !== null
-                                          ? <span className={`text-xs font-semibold tabular-nums ${change >= 0 ? "text-emerald-600" : "text-red-500"}`}>{change >= 0 ? "↑" : "↓"} {Math.abs(change).toFixed(1)}%</span>
-                                          : <span className="text-xs text-slate-400">—</span>}
-                                      </td>
-                                      <td className="px-4 py-3.5 text-right">
-                                        <div className="flex items-center justify-end gap-1.5">
-                                          <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden w-10">
-                                            <div className="h-full rounded-full" style={{ width: `${Math.min(ch.engagementRate, 100)}%`, background: ch.engagementRate > 50 ? "#10B981" : ch.engagementRate > 30 ? "#F59E0B" : "#EF4444" }} />
+                                          <div>
+                                            <div className="text-xs font-semibold text-slate-800">{ch.channel}</div>
+                                            <div className="text-[10px] text-slate-400 mt-0.5">{Math.round(totalChannelSessions ? (ch.sessions / totalChannelSessions) * 100 : 0)}% of total</div>
                                           </div>
-                                          <span className={`text-xs font-semibold tabular-nums w-8 text-right ${ch.engagementRate > 50 ? "text-emerald-600" : ch.engagementRate > 30 ? "text-amber-600" : "text-red-500"}`}>{Math.min(ch.engagementRate, 100).toFixed(0)}%</span>
                                         </div>
                                       </td>
-                                      <td className="px-4 py-3.5 text-right">
-                                        <div className="flex items-center justify-end gap-1.5">
-                                          <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden w-10">
-                                            <div className="h-full rounded-full" style={{ width: `${bounce}%`, background: bounce < 30 ? "#10B981" : bounce < 60 ? "#F59E0B" : "#EF4444" }} />
+                                      <td className="px-4 py-4 text-right">
+                                        <div className="text-sm font-bold text-slate-800 tabular-nums">{fmt(ch.sessions)}</div>
+                                        <div className="text-[10px] text-slate-400 tabular-nums mt-0.5">prev {fmt(ch.prevSessions)}</div>
+                                      </td>
+                                      <td className="px-4 py-4 text-right">
+                                        {change !== null ? (
+                                          <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ${change >= 0 ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600"}`}>
+                                            {change >= 0 ? "↑" : "↓"} {Math.abs(change).toFixed(1)}%
                                           </div>
-                                          <span className={`text-xs font-semibold tabular-nums w-8 text-right ${bounce < 30 ? "text-emerald-600" : bounce < 60 ? "text-amber-600" : "text-red-500"}`}>{bounce.toFixed(0)}%</span>
+                                        ) : <span className="text-xs text-slate-400">New</span>}
+                                      </td>
+                                      <td className="px-4 py-4">
+                                        <div className="flex items-center gap-2">
+                                          <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden max-w-[80px]">
+                                            <div className="h-full rounded-full transition-all" style={{ width: `${eng}%`, background: qualityColor }} />
+                                          </div>
+                                          <span className="text-xs font-bold tabular-nums" style={{ color: qualityColor }}>{eng > 0 ? `${eng.toFixed(0)}%` : ""}</span>
+                                          <span className="text-[10px] text-slate-400">{qualityLabel}</span>
                                         </div>
                                       </td>
-                                      <td className="px-4 py-3.5 text-right text-xs font-semibold text-slate-700 tabular-nums">{ch.conversions > 0 ? ch.conversions : "—"}</td>
-                                      <td className="px-4 py-3.5 text-center">
-                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold border whitespace-nowrap ${badge.cls}`}>{badge.label}</span>
+                                      <td className="px-4 py-4 text-right">
+                                        <div className="text-sm font-bold text-slate-700 tabular-nums">{engSess > 0 ? fmt(engSess) : "—"}</div>
+                                        <div className="text-[10px] text-slate-400 mt-0.5">of {fmt(ch.sessions)} visitors</div>
+                                      </td>
+                                      <td className="px-4 py-4 text-center">
+                                        <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold border whitespace-nowrap ${badge.cls}`}>{badge.label}</span>
                                       </td>
                                     </tr>
                                   )
@@ -2469,66 +2500,12 @@ export default function ClientDashboard() {
                               </tbody>
                             </table>
                           </div>
+                          <div className="px-5 py-3 bg-slate-50/60 border-t border-slate-100 flex flex-wrap gap-x-6 gap-y-1">
+                            <span className="text-[10px] text-slate-400"><span className="font-semibold text-slate-500">Visitor Quality</span> — % of visitors who clicked, scrolled, or spent meaningful time. Above 50% is healthy.</span>
+                            <span className="text-[10px] text-slate-400"><span className="font-semibold text-slate-500">Engaged Visitors</span> — actual count who interacted, not just landed and left.</span>
+                          </div>
+                          </>
                         )}
-                      </div>
-
-                      {/* Traffic Quality by Channel */}
-                      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-                        <div className="px-5 py-4 border-b border-slate-100">
-                          <div className="text-sm font-semibold text-slate-900">Traffic Quality by Channel</div>
-                          <div className="text-xs text-slate-400 mt-0.5">Compare engagement and conversion metrics across channels.</div>
-                        </div>
-                        <div className="overflow-x-auto">
-                          <table className="w-full">
-                            <thead>
-                              <tr className="border-b border-slate-100 bg-slate-50/80">
-                                <th className="text-left text-xs font-semibold text-slate-500 px-5 py-3 min-w-[160px]">Channel</th>
-                                <th className="text-left text-xs font-semibold text-slate-500 px-4 py-3 min-w-[140px]">Engagement Rate</th>
-                                <th className="text-left text-xs font-semibold text-slate-500 px-4 py-3 min-w-[140px]">Bounce Rate</th>
-                                <th className="text-right text-xs font-semibold text-slate-500 px-4 py-3">Key Event Rate</th>
-                                <th className="text-right text-xs font-semibold text-slate-500 px-5 py-3">Engaged Sessions</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {channels.filter(c => c.sessions > 0).map((ch) => {
-                                const eng = ch.engagementRate
-                                const bounce = Math.max(0, 100 - eng)
-                                const keyEventRate = ch.sessions > 0 ? (ch.conversions / ch.sessions) * 100 : 0
-                                const engSess = Math.round(ch.sessions * eng / 100)
-                                return (
-                                  <tr key={ch.channel} className="border-b border-slate-50 hover:bg-slate-50/60 transition-colors">
-                                    <td className="px-5 py-3.5">
-                                      <div className="flex items-center gap-2">
-                                        <div className="w-2 h-2 rounded-full shrink-0" style={{ background: chColor(ch.channel) }} />
-                                        <span className="text-xs font-semibold text-slate-800">{ch.channel}</span>
-                                      </div>
-                                    </td>
-                                    <td className="px-4 py-3.5">
-                                      <div className="flex items-center gap-2">
-                                        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden w-20">
-                                          <div className="h-full rounded-full" style={{ width: `${Math.min(eng, 100)}%`, background: eng > 50 ? "#10B981" : eng > 30 ? "#F59E0B" : "#EF4444" }} />
-                                        </div>
-                                        <span className={`text-xs font-semibold tabular-nums ${eng > 50 ? "text-emerald-600" : eng > 30 ? "text-amber-600" : "text-red-500"}`}>{Math.min(eng, 100).toFixed(0)}%</span>
-                                      </div>
-                                    </td>
-                                    <td className="px-4 py-3.5">
-                                      <div className="flex items-center gap-2">
-                                        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden w-20">
-                                          <div className="h-full rounded-full" style={{ width: `${bounce}%`, background: bounce < 30 ? "#10B981" : bounce < 60 ? "#F59E0B" : "#EF4444" }} />
-                                        </div>
-                                        <span className={`text-xs font-semibold tabular-nums ${bounce < 30 ? "text-emerald-600" : bounce < 60 ? "text-amber-600" : "text-red-500"}`}>{bounce.toFixed(0)}%</span>
-                                      </div>
-                                    </td>
-                                    <td className="px-4 py-3.5 text-right">
-                                      <span className={`text-xs font-semibold tabular-nums ${keyEventRate > 2 ? "text-emerald-600" : keyEventRate > 0 ? "text-slate-700" : "text-slate-400"}`}>{keyEventRate > 0 ? `${keyEventRate.toFixed(1)}%` : "—"}</span>
-                                    </td>
-                                    <td className="px-5 py-3.5 text-right text-xs font-semibold text-slate-600 tabular-nums">{fmt(engSess)}</td>
-                                  </tr>
-                                )
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
                       </div>
 
                       {/* Your Website This Month — dark card */}
