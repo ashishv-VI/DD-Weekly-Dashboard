@@ -260,14 +260,16 @@ The **Leads button** in the dashboard tab bar is PROTECTED:
 
 ## 11. Upcoming / Pending Work
 
-### In Progress (Next Session Will Implement)
-- [ ] **Interactive KPI ↔ Chart linking** — Click a KPI card to highlight its line in the trend chart
-  - Dim all other lines to 10% opacity
-  - Selected line: thicker (2.5px), area fill underneath
-  - Show dot markers at each data point
-  - Floating end-of-line value pill with slide-in animation
-  - Count-up animation on the KPI card number (0 → current value, 600ms)
-  - Need `trafficSelectedKpi` state at parent component level (not inside IIFE)
+### Recently Completed
+- [x] **Interactive KPI ↔ Chart linking** — Commit `e51078f`
+  - `trafficSelectedKpi` state added at parent component level (line ~1312)
+  - Click any KPI card → other chart lines fade to 10% opacity, selected line thickens to 2.5px
+  - Area fill appears under selected line
+  - Dot markers shown at ~8 evenly spaced points on selected line
+  - Floating tooltip pill above last data point (color-matched, animated)
+  - Count-up bounce animation on KPI card number (CSS `@keyframes kpiCountUp`)
+  - Click same card again to deselect and restore all lines
+  - CSS: `@keyframes kpiCountUp` + `@keyframes kpiEndLabel` injected via `<style>` in IIFE return
 
 ### Known Issues / To Fix
 - [ ] Direct traffic often shows 70–80% share for KodaCars — this is likely a UTM tracking issue on the client side (not a dashboard bug, but worth surfacing in insights)
@@ -315,4 +317,4 @@ Real data observed from the dashboard (as of Sept 2026):
 
 ---
 
-*Last updated: 2026-09-18 — Traffic tab redesign complete, KPI-chart interaction pending*
+*Last updated: 2026-09-18 — Traffic tab redesign + interactive KPI ↔ chart linking complete*
