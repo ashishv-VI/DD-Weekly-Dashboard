@@ -2348,11 +2348,12 @@ export default function ClientDashboard() {
                                 const lastY = (1 - Math.min(lastV, maxY) / maxY) * chartH
                                 const label = fmt(selValue)
                                 const lw = label.length * 7 + 16
+                                const cx = Math.min(lastX, chartW - lw / 2 - 4)
                                 return (
                                   <g style={{ animation: "kpiEndLabel 0.35s ease-out" }}>
-                                    <rect x={lastX - lw / 2} y={lastY - 28} width={lw} height={17} rx="4" fill={selColor} />
-                                    <polygon points={`${lastX - 4},${lastY - 11} ${lastX + 4},${lastY - 11} ${lastX},${lastY - 5}`} fill={selColor} />
-                                    <text x={lastX} y={lastY - 17} textAnchor="middle" fontSize="9" fontWeight="bold" fill="white">{label}</text>
+                                    <rect x={cx - lw / 2} y={lastY - 28} width={lw} height={17} rx="4" fill={selColor} />
+                                    <polygon points={`${cx - 4},${lastY - 11} ${cx + 4},${lastY - 11} ${cx},${lastY - 5}`} fill={selColor} />
+                                    <text x={cx} y={lastY - 17} textAnchor="middle" fontSize="9" fontWeight="bold" fill="white">{label}</text>
                                   </g>
                                 )
                               })()}
