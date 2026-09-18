@@ -1310,6 +1310,7 @@ export default function ClientDashboard() {
   const [customStart, setCustomStart] = useState("")
   const [customEnd, setCustomEnd] = useState("")
   const [activeTab, setActiveTab] = useState<TabKey>("overview")
+  const [trafficSelectedKpi, setTrafficSelectedKpi] = useState<string | null>(null)
   const [pagespeed, setPagespeed] = useState<PageSpeedData | null>(null)
   const [psLoading, setPsLoading] = useState(false)
   const [psError, setPsError] = useState(false)
@@ -2218,8 +2219,21 @@ export default function ClientDashboard() {
                   ? [{ title: "Grow AI Visibility", p: "Low", pc: "text-blue-600 bg-blue-50 border-blue-100", desc: `${fmt(aiCh.sessions)} AI-referred sessions. Increase brand mentions in AI tools.`, impact: "+50–100 visits/mo" }] : []),
               ]
               if (dynOpps.length === 0) dynOpps.push({ title: "Keep up the momentum", p: "Good", pc: "text-green-600 bg-green-50 border-green-100", desc: "All channels are performing well. Focus on content quality and maintaining backlink growth." })
+              // ── Selected KPI → chart linking ───────────────────────────
+              const selectedTrendMap: Record<string, { trend: number[]; color: string; value: number }> = {
+                total: { trend: totalTrend, color: "#334155", value: totalChannelSessions },
+                organic: { trend: organicTrend, color: "#10B981", value: organic?.sessions ?? 0 },
+                direct: { trend: directTrend, color: "#3B82F6", value: direct?.sessions ?? 0 },
+                referral: { trend: referralTrend, color: "#F59E0B", value: referral?.sessions ?? 0 },
+                social: { trend: socialTrend, color: "#EC4899", value: social?.sessions ?? 0 },
+              }
+              const selKpi = trafficSelectedKpi && selectedTrendMap[trafficSelectedKpi] ? trafficSelectedKpi : null
+              const selTrend = selKpi ? selectedTrendMap[selKpi].trend : null
+              const selColor = selKpi ? selectedTrendMap[selKpi].color : "#334155"
+              const selValue = selKpi ? selectedTrendMap[selKpi].value : 0
               return (
                 <div className="space-y-5 anim-card">
+                  <style>{`@keyframes kpiCountUp{0%{transform:scale(0.75) translateY(8px);opacity:0}60%{transform:scale(1.08) translateY(-2px);opacity:1}100%{transform:scale(1) translateY(0);opacity:1}}@keyframes kpiEndLabel{0%{opacity:0;transform:translateY(-6px) scale(0.85)}100%{opacity:1;transform:translateY(0) scale(1)}}`}</style>
 
                   {/* ── Header ── */}
                   <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -2247,12 +2261,12 @@ export default function ClientDashboard() {
                         ? <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.8"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
                         : <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.8"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
                       return (
-                        <div key={card.id} className="bg-white border border-slate-200 rounded-xl p-4 hover:shadow-md hover:border-slate-300 transition-all">
+                        <div key={card.id} onClick={() => setTrafficSelectedKpi(trafficSelectedKpi === card.id ? null : card.id)} className={`bg-white border rounded-xl p-4 cursor-pointer transition-all select-none ${trafficSelectedKpi === card.id ? "shadow-lg border-2" : "border-slate-200 hover:shadow-md hover:border-slate-300"}`} style={trafficSelectedKpi === card.id ? { borderColor: card.color, transform: "scale(1.025)" } : {}}>
                           <div className="flex items-center gap-2 mb-3">
-                            <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style={{ background: `${card.color}18`, color: card.color }}>{iconEl}</div>
+                            <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 transition-transform" style={{ background: `${card.color}18`, color: card.color, transform: trafficSelectedKpi === card.id ? "scale(1.2)" : "scale(1)" }}>{iconEl}</div>
                             <div className="text-xs text-slate-500 font-medium leading-tight">{card.label}</div>
                           </div>
-                          <div className="text-2xl font-bold text-slate-900 tabular-nums">{fmt(card.value)}</div>
+                          <div key={`kv-${card.id}-${trafficSelectedKpi === card.id ? 1 : 0}`} className="text-2xl font-bold text-slate-900 tabular-nums" style={trafficSelectedKpi === card.id ? { animation: "kpiCountUp 0.5s cubic-bezier(0.34,1.56,0.64,1)" } : {}}>{fmt(card.value)}</div>
                           {change !== null
                             ? <div className={`text-sm font-bold flex items-center gap-0.5 mt-0.5 ${change >= 0 ? "text-emerald-600" : "text-red-500"}`}>{change >= 0 ? "↑" : "↓"} {Math.abs(change).toFixed(1)}%</div>
                             : null}
@@ -2306,13 +2320,42 @@ export default function ClientDashboard() {
                               </g>
                             ))}
                             <g transform="translate(38,6)">
-                              <path d={svgArea(totalTrend, maxY, chartW, chartH)} fill="#334155" fillOpacity="0.04" />
-                              <path d={svgLine(totalTrend, maxY, chartW, chartH)} fill="none" stroke="#334155" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                              <path d={svgLine(organicTrend, maxY, chartW, chartH)} fill="none" stroke="#10B981" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                              <path d={svgLine(directTrend, maxY, chartW, chartH)} fill="none" stroke="#3B82F6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                              <path d={svgLine(referralTrend, maxY, chartW, chartH)} fill="none" stroke="#F59E0B" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                              {(social?.sessions ?? 0) > 0 && <path d={svgLine(socialTrend, maxY, chartW, chartH)} fill="none" stroke="#EC4899" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="4 2" />}
-                              {(aiCh?.sessions ?? 0) > 0 && <path d={svgLine(aiTrend, maxY, chartW, chartH)} fill="none" stroke="#06B6D4" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="4 2" />}
+                              {/* Area fill for selected line */}
+                              {selKpi === "total" && <path d={svgArea(totalTrend, maxY, chartW, chartH)} fill="#334155" fillOpacity="0.1" />}
+                              {selKpi === "organic" && <path d={svgArea(organicTrend, maxY, chartW, chartH)} fill="#10B981" fillOpacity="0.1" />}
+                              {selKpi === "direct" && <path d={svgArea(directTrend, maxY, chartW, chartH)} fill="#3B82F6" fillOpacity="0.1" />}
+                              {selKpi === "referral" && <path d={svgArea(referralTrend, maxY, chartW, chartH)} fill="#F59E0B" fillOpacity="0.1" />}
+                              {selKpi === "social" && <path d={svgArea(socialTrend, maxY, chartW, chartH)} fill="#EC4899" fillOpacity="0.1" />}
+                              {/* Lines — fade unselected, thicken selected */}
+                              <path d={svgLine(totalTrend, maxY, chartW, chartH)} fill="none" stroke="#334155" strokeWidth={selKpi === "total" ? 2.5 : 2} strokeLinecap="round" strokeLinejoin="round" style={{ opacity: selKpi && selKpi !== "total" ? 0.1 : 1, transition: "opacity 0.3s" }} />
+                              <path d={svgLine(organicTrend, maxY, chartW, chartH)} fill="none" stroke="#10B981" strokeWidth={selKpi === "organic" ? 2.5 : 1.5} strokeLinecap="round" strokeLinejoin="round" style={{ opacity: selKpi && selKpi !== "organic" ? 0.1 : 1, transition: "opacity 0.3s" }} />
+                              <path d={svgLine(directTrend, maxY, chartW, chartH)} fill="none" stroke="#3B82F6" strokeWidth={selKpi === "direct" ? 2.5 : 1.5} strokeLinecap="round" strokeLinejoin="round" style={{ opacity: selKpi && selKpi !== "direct" ? 0.1 : 1, transition: "opacity 0.3s" }} />
+                              <path d={svgLine(referralTrend, maxY, chartW, chartH)} fill="none" stroke="#F59E0B" strokeWidth={selKpi === "referral" ? 2.5 : 1.5} strokeLinecap="round" strokeLinejoin="round" style={{ opacity: selKpi && selKpi !== "referral" ? 0.1 : 1, transition: "opacity 0.3s" }} />
+                              {(social?.sessions ?? 0) > 0 && <path d={svgLine(socialTrend, maxY, chartW, chartH)} fill="none" stroke="#EC4899" strokeWidth={selKpi === "social" ? 2.5 : 1.5} strokeLinecap="round" strokeLinejoin="round" strokeDasharray="4 2" style={{ opacity: selKpi && selKpi !== "social" ? 0.1 : 1, transition: "opacity 0.3s" }} />}
+                              {(aiCh?.sessions ?? 0) > 0 && <path d={svgLine(aiTrend, maxY, chartW, chartH)} fill="none" stroke="#06B6D4" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="4 2" style={{ opacity: selKpi ? 0.1 : 1, transition: "opacity 0.3s" }} />}
+                              {/* Dots on selected line */}
+                              {selKpi && selTrend && selTrend
+                                .map((v, i) => ({ v, i }))
+                                .filter(({ i }) => i % Math.max(1, Math.ceil(selTrend!.length / 8)) === 0 || i === selTrend!.length - 1)
+                                .map(({ v, i }) => (
+                                  <circle key={i} cx={(i / (selTrend!.length - 1)) * chartW} cy={(1 - Math.min(v, maxY) / maxY) * chartH} r="3.5" fill={selColor} stroke="white" strokeWidth="2" />
+                                ))
+                              }
+                              {/* Floating label at end of selected line */}
+                              {selKpi && selTrend && (() => {
+                                const lastV = selTrend[selTrend.length - 1]
+                                const lastX = chartW
+                                const lastY = (1 - Math.min(lastV, maxY) / maxY) * chartH
+                                const label = fmt(selValue)
+                                const lw = label.length * 7 + 16
+                                return (
+                                  <g style={{ animation: "kpiEndLabel 0.35s ease-out" }}>
+                                    <rect x={lastX - lw / 2} y={lastY - 28} width={lw} height={17} rx="4" fill={selColor} />
+                                    <polygon points={`${lastX - 4},${lastY - 11} ${lastX + 4},${lastY - 11} ${lastX},${lastY - 5}`} fill={selColor} />
+                                    <text x={lastX} y={lastY - 17} textAnchor="middle" fontSize="9" fontWeight="bold" fill="white">{label}</text>
+                                  </g>
+                                )
+                              })()}
                             </g>
                             {[0, Math.floor(trendPts / 4), Math.floor(trendPts / 2), Math.floor(trendPts * 3 / 4), trendPts - 1].map((di, i) => {
                               const d = new Date(); d.setDate(d.getDate() - (trendPts - 1 - di))
