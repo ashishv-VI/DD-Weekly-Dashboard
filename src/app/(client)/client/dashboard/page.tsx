@@ -2104,11 +2104,20 @@ export default function ClientDashboard() {
               // ── Local helpers ──────────────────────────────────────────
               const CH_COLORS: Record<string, string> = { "Direct": "#3B82F6", "Organic Search": "#10B981", "Referral": "#F59E0B", "Unassigned": "#94A3B8", "Organic Social": "#EC4899", "Cross-network": "#A78BFA", "AI Assistant": "#06B6D4" }
               const chColor = (name: string) => CH_COLORS[name] ?? "#6B7280"
-              const healthBadge = (change: number | null, engRate: number) => {
-                if (change === null || (Math.abs(change) < 1 && change !== null)) return { label: "Stable", cls: "bg-slate-100 text-slate-600 border-slate-200" }
-                if (engRate > 55) return { label: "Healthy", cls: "bg-emerald-100 text-emerald-700 border-emerald-200" }
-                if (change < -25) return { label: "Critical", cls: "bg-red-100 text-red-700 border-red-200" }
-                if (change < 0) return { label: "Monitor", cls: "bg-amber-100 text-amber-700 border-amber-200" }
+              const statusBadge = (ch: ChannelRow, total: number) => {
+                const share = total ? (ch.sessions / total) * 100 : 0
+                const change = ch.prevSessions > 0 ? pct(ch.sessions, ch.prevSessions) : null
+                const eng = ch.engagementRate
+                if (ch.sessions < 5) return { label: "Low Volume", cls: "bg-slate-100 text-slate-500 border-slate-200" }
+                if (ch.channel === "Cross-network") return { label: "Low Volume", cls: "bg-slate-100 text-slate-500 border-slate-200" }
+                if (ch.channel === "Unassigned" && ch.sessions > 15) return { label: "Needs Review", cls: "bg-orange-100 text-orange-700 border-orange-200" }
+                if (share > 55 && eng < 45) return { label: "High Traffic, Low Quality", cls: "bg-red-100 text-red-700 border-red-200" }
+                if (change !== null && change < -20) return { label: "Needs Review", cls: "bg-orange-100 text-orange-700 border-orange-200" }
+                if (change !== null && change < -5) return { label: "Monitor", cls: "bg-amber-100 text-amber-700 border-amber-200" }
+                if (ch.sessions < 50 && change !== null && change > 200) return { label: "Emerging", cls: "bg-blue-100 text-blue-700 border-blue-200" }
+                if (change !== null && change > 30 && eng > 50) return { label: "Healthy", cls: "bg-emerald-100 text-emerald-700 border-emerald-200" }
+                if (change !== null && change > 30) return { label: "Growing", cls: "bg-emerald-100 text-emerald-700 border-emerald-200" }
+                if (change === null || Math.abs(change) < 5) return { label: "Stable", cls: "bg-slate-100 text-slate-600 border-slate-200" }
                 return { label: "Healthy", cls: "bg-emerald-100 text-emerald-700 border-emerald-200" }
               }
               const sparkPts = (prev: number, cur: number, W = 96, H = 28) => {
@@ -2135,17 +2144,23 @@ export default function ClientDashboard() {
               const organic = channels.find(c => c.channel === "Organic Search")
               const direct = channels.find(c => c.channel === "Direct")
               const referral = channels.find(c => c.channel === "Referral")
+              const social = channels.find(c => c.channel === "Organic Social")
+              const aiCh = channels.find(c => c.channel === "AI Assistant")
               const prevTotal = channels.reduce((s, c) => s + c.prevSessions, 0)
-              const engagedSessions = Math.round(channels.reduce((s, c) => s + c.sessions * (c.engagementRate / 100), 0))
-              const prevEngaged = Math.round(channels.reduce((s, c) => s + c.prevSessions * (c.engagementRate / 100), 0))
-              const avgEngRate = channels.length ? channels.reduce((s, c) => s + c.engagementRate, 0) / channels.length : 0
+              const avgEngRate = totalChannelSessions > 0 ? channels.reduce((s, c) => s + c.sessions * (c.engagementRate / 100), 0) / totalChannelSessions * 100 : 0
               const healthScore = Math.min(96, Math.round(avgEngRate * 0.65 + 32))
+              const directShare = totalChannelSessions ? (direct?.sessions ?? 0) / totalChannelSessions * 100 : 0
+              const organicPctChange = organic && organic.prevSessions > 0 ? pct(organic.sessions, organic.prevSessions) : null
+              const referralPctChange = referral && referral.prevSessions > 0 ? pct(referral.sessions, referral.prevSessions) : null
+              const declined = channels.filter(c => c.prevSessions > 0 && c.sessions < c.prevSessions * 0.95)
+              const top = channels[0]
+              // ── KPI Cards ──────────────────────────────────────────────
               const kpiCards = [
                 { label: "Total Sessions", value: totalChannelSessions, prev: prevTotal, color: "#334155", id: "total" },
                 { label: "Organic Sessions", value: organic?.sessions ?? 0, prev: organic?.prevSessions ?? 0, color: "#10B981", id: "organic" },
                 { label: "Direct Sessions", value: direct?.sessions ?? 0, prev: direct?.prevSessions ?? 0, color: "#3B82F6", id: "direct" },
                 { label: "Referral Sessions", value: referral?.sessions ?? 0, prev: referral?.prevSessions ?? 0, color: "#F59E0B", id: "referral" },
-                { label: "Engaged Sessions", value: engagedSessions, prev: prevEngaged, color: "#EC4899", id: "engaged" },
+                { label: "Social Sessions", value: social?.sessions ?? 0, prev: social?.prevSessions ?? 0, color: "#EC4899", id: "social" },
               ]
               // ── Trend chart ────────────────────────────────────────────
               const trendPts = trafficPeriod === "7D" ? 7 : trafficPeriod === "90D" ? 90 : 30
@@ -2158,6 +2173,8 @@ export default function ClientDashboard() {
               const organicTrend = makeTrend(organic?.prevSessions ?? 0, organic?.sessions ?? 0, 1)
               const directTrend = makeTrend(direct?.prevSessions ?? 0, direct?.sessions ?? 0, 2)
               const referralTrend = makeTrend(referral?.prevSessions ?? 0, referral?.sessions ?? 0, 3)
+              const socialTrend = makeTrend(social?.prevSessions ?? 0, social?.sessions ?? 0, 4)
+              const aiTrend = makeTrend(aiCh?.prevSessions ?? 0, aiCh?.sessions ?? 0, 5)
               const chartW = 520, chartH = 170
               const maxY = Math.max(...totalTrend, 1) * 1.12
               const yTicks = [0, Math.round(maxY * 0.33), Math.round(maxY * 0.67), Math.round(maxY)]
@@ -2171,67 +2188,76 @@ export default function ClientDashboard() {
                 donutOffset += dash
                 return seg
               })
-              // ── Insights ───────────────────────────────────────────────
-              const top = channels[0]
-              // Use 5% threshold so small declines (e.g. -8%) are caught
-              const declined = channels.filter(c => c.prevSessions > 0 && c.sessions < c.prevSessions * 0.95)
-              const organicPctChange = organic && organic.prevSessions > 0 ? pct(organic.sessions, organic.prevSessions) : null
-              const referralPctChange = referral && referral.prevSessions > 0 ? pct(referral.sessions, referral.prevSessions) : null
-              const insights: string[] = [
-                top ? `${top.channel} is your top channel at ${totalChannelSessions ? Math.round((top.sessions / totalChannelSessions) * 100) : 0}% share with ${top.engagementRate.toFixed(0)}% engagement rate.` : "",
-                organic && organic.engagementRate > 50 ? `Organic Search has strong engagement (${organic.engagementRate.toFixed(0)}%), indicating high-quality, intent-driven visitors.` : organic ? `Organic Search engagement is ${organic.engagementRate.toFixed(0)}% — consider content improvements.` : "",
-                declined.length > 0 ? `${declined.slice(0, 2).map(c => c.channel).join(" and ")} ${declined.length > 1 ? "have" : "has"} declined this period — monitor for recovery signals.` : "All channels are holding steady or growing this period.",
-              ].filter(Boolean)
-              const actions: string[] = [
-                organicPctChange !== null && organicPctChange < -3 ? "Investigate declining organic pages and refresh underperforming content." : "",
-                referralPctChange !== null && referralPctChange < -15 ? "Recover lost referral sources — identify broken backlinks and rebuild partnerships." : "",
-                avgEngRate < 45 ? "Improve user engagement by optimising page speed, CTAs and content relevance." : "",
-                "Monitor direct traffic and analyse branded vs non-branded search share.",
-              ].filter(Boolean)
-              // Dynamic opportunities — only show if condition is actually true
-              const dynOpps: { title: string; p: string; pc: string; desc: string }[] = [
+              // ── Structured Insights ────────────────────────────────────
+              const structuredInsights: { type: "alert" | "positive" | "warning"; title: string; desc: string }[] = []
+              if (directShare > 55) structuredInsights.push({ type: "alert", title: "Direct traffic unusually high", desc: `${Math.round(directShare)}% of your traffic is direct (vs. industry avg 20–40%). Check UTM tracking, redirects and attribution.` })
+              if (organicPctChange !== null && organicPctChange > 15) structuredInsights.push({ type: "positive", title: "Organic traffic growing", desc: `+${organicPctChange.toFixed(0)}% increase with ${fmt(organic?.sessions)} sessions. ${(organic?.engagementRate ?? 0) > 50 ? "Strong engagement signals quality content." : "Opportunity to improve content relevance."}` })
+              else if (organicPctChange !== null && organicPctChange > 0) structuredInsights.push({ type: "positive", title: "Organic traffic growing", desc: `+${organicPctChange.toFixed(0)}% growth in organic sessions. SEO efforts are showing results.` })
+              else if (organicPctChange !== null && organicPctChange < -8) structuredInsights.push({ type: "alert", title: "Organic traffic declining", desc: `Organic sessions dropped ${Math.abs(organicPctChange).toFixed(0)}%. Review content and check Search Console for ranking drops.` })
+              if (avgEngRate < 47) structuredInsights.push({ type: "warning", title: "Engagement rate declining", desc: `Overall engagement at ${avgEngRate.toFixed(0)}% — ${avgEngRate < 40 ? "significantly below" : "below"} the 50% benchmark. Review top landing pages.` })
+              else if (avgEngRate > 60) structuredInsights.push({ type: "positive", title: "High engagement quality", desc: `${avgEngRate.toFixed(0)}% average engagement rate — visitors are finding value in your content.` })
+              if (structuredInsights.length < 2 && top) structuredInsights.push({ type: Math.round((top.sessions / (totalChannelSessions || 1)) * 100) > 70 ? "warning" : "positive", title: `${top.channel} is top channel`, desc: `${Math.round((top.sessions / (totalChannelSessions || 1)) * 100)}% share with ${top.engagementRate.toFixed(0)}% engagement rate this period.` })
+              if (referralPctChange !== null && referralPctChange > 50) structuredInsights.push({ type: "positive", title: "Referral traffic surging", desc: `+${referralPctChange.toFixed(0)}% referral growth — backlinks and partnerships are driving strong results.` })
+              // ── Numbered Actions ───────────────────────────────────────
+              const numberedActions: { title: string; desc: string }[] = []
+              if (directShare > 55) numberedActions.push({ title: "Audit direct traffic attribution", desc: "Check UTM tags, self-referrals and campaign tracking." })
+              if (organic) numberedActions.push({ title: "Optimise top organic landing pages", desc: "Improve titles and CTAs for pages with high impressions but low engagement." })
+              if (avgEngRate < 50) numberedActions.push({ title: "Improve mobile experience", desc: `${avgEngRate.toFixed(0)}% engagement rate — optimise page speed and mobile UX.` })
+              if (numberedActions.length < 2) numberedActions.push({ title: "Monitor channel performance", desc: "Track changes weekly and update attribution settings for accurate data." })
+              // ── Dynamic Opportunities ──────────────────────────────────
+              const dynOpps: { title: string; p: string; pc: string; desc: string; impact?: string }[] = [
                 ...(organic && (organic.sessions / (totalChannelSessions || 1)) < 0.2
-                  ? [{ title: "Grow Organic Traffic", p: "High", pc: "text-red-600 bg-red-50 border-red-100", desc: `${organic ? Math.round((organic.sessions / (totalChannelSessions || 1)) * 100) : 0}% organic share with strong engagement. Expand content targeting.` }] : []),
+                  ? [{ title: "Grow Organic Traffic", p: "High", pc: "text-red-600 bg-red-50 border-red-100", desc: `${Math.round((organic.sessions / (totalChannelSessions || 1)) * 100)}% organic share. Expand content targeting and keyword strategy.`, impact: "+30–50% organic reach" }] : []),
                 ...(referralPctChange !== null && referralPctChange < -10
-                  ? [{ title: "Recover Referral Traffic", p: "High", pc: "text-red-600 bg-red-50 border-red-100", desc: `Referral dropped ${Math.abs(referralPctChange).toFixed(1)}% this period. Rebuild partnerships and fix broken backlinks.` }] : []),
+                  ? [{ title: "Recover Referral Traffic", p: "High", pc: "text-red-600 bg-red-50 border-red-100", desc: `Referral dropped ${Math.abs(referralPctChange).toFixed(0)}%. Rebuild partnerships and fix broken backlinks.`, impact: `+${Math.round(Math.abs((referral?.prevSessions ?? 0) - (referral?.sessions ?? 0)))} sessions/mo` }] : []),
                 ...(avgEngRate < 50
-                  ? [{ title: "Improve Engagement", p: "Medium", pc: "text-amber-600 bg-amber-50 border-amber-100", desc: `${avgEngRate.toFixed(0)}% average engagement rate — optimise page content and CTAs to improve visitor interaction.` }] : []),
+                  ? [{ title: "Improve Engagement", p: "Medium", pc: "text-amber-600 bg-amber-50 border-amber-100", desc: `${avgEngRate.toFixed(0)}% avg engagement — optimise page content and CTAs.`, impact: "+15–25% conversions" }] : []),
                 ...(organicPctChange !== null && organicPctChange < -5
-                  ? [{ title: "Recover Organic Traffic", p: "High", pc: "text-red-600 bg-red-50 border-red-100", desc: `Organic sessions dropped ${Math.abs(organicPctChange).toFixed(1)}% — review content and check for ranking drops in Search Console.` }] : []),
+                  ? [{ title: "Recover Organic Traffic", p: "High", pc: "text-red-600 bg-red-50 border-red-100", desc: `Organic sessions dropped ${Math.abs(organicPctChange).toFixed(0)}% — review content and ranking drops.`, impact: `+${Math.round(Math.abs((organic?.prevSessions ?? 0) - (organic?.sessions ?? 0)))} sessions/mo` }] : []),
+                ...(aiCh && aiCh.sessions > 0 && aiCh.sessions < 20
+                  ? [{ title: "Grow AI Visibility", p: "Low", pc: "text-blue-600 bg-blue-50 border-blue-100", desc: `${fmt(aiCh.sessions)} AI-referred sessions. Increase brand mentions in AI tools.`, impact: "+50–100 visits/mo" }] : []),
               ]
+              if (dynOpps.length === 0) dynOpps.push({ title: "Keep up the momentum", p: "Good", pc: "text-green-600 bg-green-50 border-green-100", desc: "All channels are performing well. Focus on content quality and maintaining backlink growth." })
               return (
                 <div className="space-y-5 anim-card">
 
-                  {/* ── Section 1: Header ── */}
+                  {/* ── Header ── */}
                   <div className="flex items-start justify-between gap-4 flex-wrap">
                     <div>
                       <h2 className="text-xl font-bold text-slate-900">Traffic Overview</h2>
                       <p className="text-sm text-slate-500 mt-1 max-w-2xl">Understand where your visitors come from, how traffic quality is changing, and what actions to take to improve acquisition performance.</p>
                     </div>
                     <div className="flex items-center gap-1.5 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 shrink-0">
-                      <svg className="w-3.5 h-3.5 text-purple-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/></svg>
-                      <span>AI Traffic insights are in the <strong className="text-purple-600">AI Visibility</strong> tab</span>
+                      <svg className="w-3.5 h-3.5 text-orange-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 9h6M9 12h4M9 15h5"/></svg>
+                      <span>Data from Google Analytics 4</span>
                     </div>
                   </div>
 
-                  {/* ── Section 2: KPI Cards ── */}
-                  <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+                  {/* ── KPI Cards ── */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                     {kpiCards.map(card => {
                       const change = card.prev > 0 ? ((card.value - card.prev) / card.prev) * 100 : null
+                      const iconEl = card.id === "total"
+                        ? <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.8"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                        : card.id === "organic"
+                        ? <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.8"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                        : card.id === "direct"
+                        ? <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.8"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                        : card.id === "referral"
+                        ? <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.8"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                        : <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.8"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
                       return (
-                        <div key={card.id} className="bg-white border border-slate-200 rounded-xl p-4 hover:shadow-md hover:border-slate-300 transition-all cursor-default group">
-                          <div className="flex items-center gap-1.5 mb-2">
-                            <div className="w-2 h-2 rounded-full shrink-0" style={{ background: card.color }} />
+                        <div key={card.id} className="bg-white border border-slate-200 rounded-xl p-4 hover:shadow-md hover:border-slate-300 transition-all">
+                          <div className="flex items-center gap-2 mb-3">
+                            <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style={{ background: `${card.color}18`, color: card.color }}>{iconEl}</div>
                             <div className="text-xs text-slate-500 font-medium leading-tight">{card.label}</div>
                           </div>
-                          <div className="text-2xl font-bold text-slate-900 tabular-nums mb-0.5">{fmt(card.value)}</div>
-                          {change !== null ? (
-                            <div className={`text-xs font-semibold flex items-center gap-0.5 mb-2.5 ${change >= 0 ? "text-emerald-600" : "text-red-500"}`}>
-                              <span>{change >= 0 ? "↑" : "↓"}</span><span>{Math.abs(change).toFixed(1)}%</span>
-                              <span className="text-slate-400 font-normal ml-0.5">vs prev period</span>
-                            </div>
-                          ) : <div className="text-xs text-slate-400 mb-2.5">No previous data</div>}
-                          <svg width="96" height="28" viewBox="0 0 96 28" className="w-full opacity-75 group-hover:opacity-100 transition-opacity">
+                          <div className="text-2xl font-bold text-slate-900 tabular-nums">{fmt(card.value)}</div>
+                          {change !== null
+                            ? <div className={`text-sm font-bold flex items-center gap-0.5 mt-0.5 ${change >= 0 ? "text-emerald-600" : "text-red-500"}`}>{change >= 0 ? "↑" : "↓"} {Math.abs(change).toFixed(1)}%</div>
+                            : null}
+                          <div className="text-xs text-slate-400 mt-0.5 mb-2.5">vs {fmt(card.prev)}</div>
+                          <svg width="96" height="28" viewBox="0 0 96 28" className="w-full opacity-75">
                             <polyline points={sparkPts(card.prev, card.value)} fill="none" stroke={card.color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                           </svg>
                         </div>
@@ -2239,414 +2265,473 @@ export default function ClientDashboard() {
                     })}
                   </div>
 
-                  {/* ── Section 3+4: Trend + Distribution + Intelligence ── */}
+                  {/* ── Main Content + Right Sidebar ── */}
                   <div className="grid grid-cols-12 gap-4">
 
-                    {/* Traffic Trend Chart */}
-                    <div className="col-span-12 lg:col-span-7 bg-white border border-slate-200 rounded-xl p-5">
-                      <div className="flex items-start justify-between mb-3 gap-3 flex-wrap">
-                        <div>
-                          <div className="text-sm font-semibold text-slate-900">Traffic Trend</div>
-                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2">
-                            {[{ label: "Total Sessions", color: "#334155" }, { label: "Organic Search", color: "#10B981" }, { label: "Direct", color: "#3B82F6" }, { label: "Referral", color: "#F59E0B" }].map(l => (
-                              <div key={l.label} className="flex items-center gap-1.5">
-                                <div className="w-3 h-0.5 rounded" style={{ background: l.color }} />
-                                <span className="text-xs text-slate-500">{l.label}</span>
+                    {/* Main content — 9 cols */}
+                    <div className="col-span-12 xl:col-span-9 space-y-4">
+
+                      {/* Trend + Donut row */}
+                      <div className="grid grid-cols-12 gap-4">
+
+                        {/* Traffic Trend */}
+                        <div className="col-span-12 lg:col-span-8 bg-white border border-slate-200 rounded-xl p-5">
+                          <div className="flex items-start justify-between mb-4 gap-3 flex-wrap">
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <div className="text-sm font-semibold text-slate-900">Traffic Trend</div>
+                                <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2">
+                                {[{ label: "Total", color: "#334155" }, { label: "Organic Search", color: "#10B981" }, { label: "Direct", color: "#3B82F6" }, { label: "Referral", color: "#F59E0B" }, { label: "Social", color: "#EC4899" }, { label: "AI Assistant", color: "#06B6D4" }].map(l => (
+                                  <div key={l.label} className="flex items-center gap-1.5">
+                                    <div className="w-3 h-0.5 rounded" style={{ background: l.color }} />
+                                    <span className="text-xs text-slate-500">{l.label}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                            <div className="flex bg-slate-50 border border-slate-200 rounded-lg p-0.5 gap-0.5 shrink-0">
+                              {(["7D", "30D", "90D"] as const).map(p => (
+                                <button key={p} onClick={() => setTrafficPeriod(p)}
+                                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${trafficPeriod === p ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>{p}</button>
+                              ))}
+                            </div>
+                          </div>
+                          <svg viewBox={`0 0 ${chartW + 46} ${chartH + 28}`} className="w-full" style={{ height: 200 }}>
+                            {yTicks.map((v, i) => (
+                              <g key={i}>
+                                <line x1="38" y1={6 + (1 - v / maxY) * chartH} x2={chartW + 38} y2={6 + (1 - v / maxY) * chartH} stroke="#F1F5F9" strokeWidth="1" />
+                                <text x="34" y={10 + (1 - v / maxY) * chartH} textAnchor="end" fontSize="9" fill="#94A3B8">{fmtK(v)}</text>
+                              </g>
+                            ))}
+                            <g transform="translate(38,6)">
+                              <path d={svgArea(totalTrend, maxY, chartW, chartH)} fill="#334155" fillOpacity="0.04" />
+                              <path d={svgLine(totalTrend, maxY, chartW, chartH)} fill="none" stroke="#334155" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                              <path d={svgLine(organicTrend, maxY, chartW, chartH)} fill="none" stroke="#10B981" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                              <path d={svgLine(directTrend, maxY, chartW, chartH)} fill="none" stroke="#3B82F6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                              <path d={svgLine(referralTrend, maxY, chartW, chartH)} fill="none" stroke="#F59E0B" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                              {(social?.sessions ?? 0) > 0 && <path d={svgLine(socialTrend, maxY, chartW, chartH)} fill="none" stroke="#EC4899" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="4 2" />}
+                              {(aiCh?.sessions ?? 0) > 0 && <path d={svgLine(aiTrend, maxY, chartW, chartH)} fill="none" stroke="#06B6D4" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="4 2" />}
+                            </g>
+                            {[0, Math.floor(trendPts / 4), Math.floor(trendPts / 2), Math.floor(trendPts * 3 / 4), trendPts - 1].map((di, i) => {
+                              const d = new Date(); d.setDate(d.getDate() - (trendPts - 1 - di))
+                              return <text key={i} x={38 + (di / (trendPts - 1)) * chartW} y={chartH + 22} textAnchor="middle" fontSize="9" fill="#94A3B8">{d.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</text>
+                            })}
+                          </svg>
+                        </div>
+
+                        {/* Traffic Distribution */}
+                        <div className="col-span-12 lg:col-span-4 bg-white border border-slate-200 rounded-xl p-5">
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <div className="text-sm font-semibold text-slate-900">Traffic Distribution</div>
+                            <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+                          </div>
+                          <div className="text-xs text-slate-400 mb-3">Last {trafficPeriod === "7D" ? "7 days" : trafficPeriod === "90D" ? "90 days" : "30 days"}</div>
+                          <div className="flex justify-center mb-4">
+                            <svg viewBox="0 0 160 160" width="130" height="130">
+                              <circle cx="80" cy="80" r="54" fill="none" stroke="#F1F5F9" strokeWidth="22" />
+                              {donutSegments.map((seg, i) => (
+                                <circle key={i} cx="80" cy="80" r="54" fill="none" stroke={seg.color} strokeWidth="22"
+                                  strokeDasharray={`${seg.dash} ${seg.gap}`} strokeDashoffset={seg.offset} transform="rotate(-90 80 80)" />
+                              ))}
+                              <text x="80" y="75" textAnchor="middle" fontSize="17" fontWeight="bold" fill="#0F172A">{fmt(totalChannelSessions)}</text>
+                              <text x="80" y="90" textAnchor="middle" fontSize="8.5" fill="#94A3B8">Sessions</text>
+                            </svg>
+                          </div>
+                          <div className="space-y-2">
+                            {donutSegments.map(ch => (
+                              <div key={ch.channel} className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <div className="w-2 h-2 rounded-full shrink-0" style={{ background: ch.color }} />
+                                  <span className="text-xs text-slate-600 truncate">{ch.channel}</span>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <span className="text-xs font-semibold text-slate-700 tabular-nums">{ch.pct.toFixed(0)}%</span>
+                                  <span className="text-xs text-slate-400 tabular-nums w-10 text-right">{fmt(ch.sessions)}</span>
+                                </div>
                               </div>
                             ))}
                           </div>
                         </div>
-                        <div className="flex bg-slate-50 border border-slate-200 rounded-lg p-0.5 gap-0.5 shrink-0">
-                          {(["7D", "30D", "90D"] as const).map(p => (
-                            <button key={p} onClick={() => setTrafficPeriod(p)}
-                              className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${trafficPeriod === p ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>{p}</button>
+                      </div>
+
+                      {/* Traffic Channel Performance table */}
+                      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                        <div className="px-5 py-4 border-b border-slate-100">
+                          <div className="text-sm font-semibold text-slate-900">Traffic Channel Performance</div>
+                          <div className="text-xs text-slate-400 mt-0.5">Compare key metrics across channels to understand quality and growth.</div>
+                        </div>
+                        {channels.length === 0 ? (
+                          <div className="py-12 text-center text-sm text-slate-400">No channel data available for this period</div>
+                        ) : (
+                          <div className="overflow-x-auto">
+                            <table className="w-full">
+                              <thead>
+                                <tr className="border-b border-slate-100 bg-slate-50/80">
+                                  <th className="text-left text-xs font-semibold text-slate-500 px-5 py-3 min-w-[160px]">Channel</th>
+                                  <th className="text-right text-xs font-semibold text-slate-500 px-4 py-3">Sessions ↓</th>
+                                  <th className="text-right text-xs font-semibold text-slate-500 px-4 py-3">Change</th>
+                                  <th className="text-right text-xs font-semibold text-slate-500 px-4 py-3">Engagement Rate</th>
+                                  <th className="text-right text-xs font-semibold text-slate-500 px-4 py-3">Bounce Rate</th>
+                                  <th className="text-right text-xs font-semibold text-slate-500 px-4 py-3">Key Events</th>
+                                  <th className="text-center text-xs font-semibold text-slate-500 px-4 py-3">Status</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {channels.map((ch) => {
+                                  const change = ch.prevSessions > 0 ? pct(ch.sessions, ch.prevSessions) : null
+                                  const bounce = Math.max(0, 100 - ch.engagementRate)
+                                  const badge = statusBadge(ch, totalChannelSessions)
+                                  return (
+                                    <tr key={ch.channel} className="border-b border-slate-50 hover:bg-blue-50/30 transition-colors">
+                                      <td className="px-5 py-3.5">
+                                        <div className="flex items-center gap-2.5">
+                                          <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${chColor(ch.channel)}18` }}>
+                                            <div className="w-2.5 h-2.5 rounded-full" style={{ background: chColor(ch.channel) }} />
+                                          </div>
+                                          <span className="text-xs font-semibold text-slate-800">{ch.channel}</span>
+                                        </div>
+                                      </td>
+                                      <td className="px-4 py-3.5 text-right text-xs font-bold text-slate-800 tabular-nums">{fmt(ch.sessions)}</td>
+                                      <td className="px-4 py-3.5 text-right">
+                                        {change !== null
+                                          ? <span className={`text-xs font-semibold tabular-nums ${change >= 0 ? "text-emerald-600" : "text-red-500"}`}>{change >= 0 ? "↑" : "↓"} {Math.abs(change).toFixed(1)}%</span>
+                                          : <span className="text-xs text-slate-400">—</span>}
+                                      </td>
+                                      <td className="px-4 py-3.5 text-right">
+                                        <div className="flex items-center justify-end gap-1.5">
+                                          <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden w-10">
+                                            <div className="h-full rounded-full" style={{ width: `${Math.min(ch.engagementRate, 100)}%`, background: ch.engagementRate > 50 ? "#10B981" : ch.engagementRate > 30 ? "#F59E0B" : "#EF4444" }} />
+                                          </div>
+                                          <span className={`text-xs font-semibold tabular-nums w-8 text-right ${ch.engagementRate > 50 ? "text-emerald-600" : ch.engagementRate > 30 ? "text-amber-600" : "text-red-500"}`}>{Math.min(ch.engagementRate, 100).toFixed(0)}%</span>
+                                        </div>
+                                      </td>
+                                      <td className="px-4 py-3.5 text-right">
+                                        <div className="flex items-center justify-end gap-1.5">
+                                          <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden w-10">
+                                            <div className="h-full rounded-full" style={{ width: `${bounce}%`, background: bounce < 30 ? "#10B981" : bounce < 60 ? "#F59E0B" : "#EF4444" }} />
+                                          </div>
+                                          <span className={`text-xs font-semibold tabular-nums w-8 text-right ${bounce < 30 ? "text-emerald-600" : bounce < 60 ? "text-amber-600" : "text-red-500"}`}>{bounce.toFixed(0)}%</span>
+                                        </div>
+                                      </td>
+                                      <td className="px-4 py-3.5 text-right text-xs font-semibold text-slate-700 tabular-nums">{ch.conversions > 0 ? ch.conversions : "—"}</td>
+                                      <td className="px-4 py-3.5 text-center">
+                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold border whitespace-nowrap ${badge.cls}`}>{badge.label}</span>
+                                      </td>
+                                    </tr>
+                                  )
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Traffic Quality by Channel */}
+                      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                        <div className="px-5 py-4 border-b border-slate-100">
+                          <div className="text-sm font-semibold text-slate-900">Traffic Quality by Channel</div>
+                          <div className="text-xs text-slate-400 mt-0.5">Compare engagement and conversion metrics across channels.</div>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full">
+                            <thead>
+                              <tr className="border-b border-slate-100 bg-slate-50/80">
+                                <th className="text-left text-xs font-semibold text-slate-500 px-5 py-3 min-w-[160px]">Channel</th>
+                                <th className="text-left text-xs font-semibold text-slate-500 px-4 py-3 min-w-[140px]">Engagement Rate</th>
+                                <th className="text-left text-xs font-semibold text-slate-500 px-4 py-3 min-w-[140px]">Bounce Rate</th>
+                                <th className="text-right text-xs font-semibold text-slate-500 px-4 py-3">Key Event Rate</th>
+                                <th className="text-right text-xs font-semibold text-slate-500 px-5 py-3">Engaged Sessions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {channels.filter(c => c.sessions > 0).map((ch) => {
+                                const eng = ch.engagementRate
+                                const bounce = Math.max(0, 100 - eng)
+                                const keyEventRate = ch.sessions > 0 ? (ch.conversions / ch.sessions) * 100 : 0
+                                const engSess = Math.round(ch.sessions * eng / 100)
+                                return (
+                                  <tr key={ch.channel} className="border-b border-slate-50 hover:bg-slate-50/60 transition-colors">
+                                    <td className="px-5 py-3.5">
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-2 h-2 rounded-full shrink-0" style={{ background: chColor(ch.channel) }} />
+                                        <span className="text-xs font-semibold text-slate-800">{ch.channel}</span>
+                                      </div>
+                                    </td>
+                                    <td className="px-4 py-3.5">
+                                      <div className="flex items-center gap-2">
+                                        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden w-20">
+                                          <div className="h-full rounded-full" style={{ width: `${Math.min(eng, 100)}%`, background: eng > 50 ? "#10B981" : eng > 30 ? "#F59E0B" : "#EF4444" }} />
+                                        </div>
+                                        <span className={`text-xs font-semibold tabular-nums ${eng > 50 ? "text-emerald-600" : eng > 30 ? "text-amber-600" : "text-red-500"}`}>{Math.min(eng, 100).toFixed(0)}%</span>
+                                      </div>
+                                    </td>
+                                    <td className="px-4 py-3.5">
+                                      <div className="flex items-center gap-2">
+                                        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden w-20">
+                                          <div className="h-full rounded-full" style={{ width: `${bounce}%`, background: bounce < 30 ? "#10B981" : bounce < 60 ? "#F59E0B" : "#EF4444" }} />
+                                        </div>
+                                        <span className={`text-xs font-semibold tabular-nums ${bounce < 30 ? "text-emerald-600" : bounce < 60 ? "text-amber-600" : "text-red-500"}`}>{bounce.toFixed(0)}%</span>
+                                      </div>
+                                    </td>
+                                    <td className="px-4 py-3.5 text-right">
+                                      <span className={`text-xs font-semibold tabular-nums ${keyEventRate > 2 ? "text-emerald-600" : keyEventRate > 0 ? "text-slate-700" : "text-slate-400"}`}>{keyEventRate > 0 ? `${keyEventRate.toFixed(1)}%` : "—"}</span>
+                                    </td>
+                                    <td className="px-5 py-3.5 text-right text-xs font-semibold text-slate-600 tabular-nums">{fmt(engSess)}</td>
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      {/* Your Website This Month — dark card */}
+                      <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-xl p-6 text-white">
+                        <div className="flex items-center justify-between gap-3 mb-5 flex-wrap">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
+                              <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                            </div>
+                            <div>
+                              <div className="text-sm font-bold">Your Website This Month</div>
+                              <div className="text-xs text-slate-400 mt-0.5">A quick summary of what&apos;s changed and what to focus on.</div>
+                            </div>
+                          </div>
+                          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold shrink-0 ${healthScore >= 70 ? "bg-emerald-500/20 text-emerald-400" : healthScore >= 50 ? "bg-amber-500/20 text-amber-400" : "bg-red-500/20 text-red-400"}`}>
+                            <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${healthScore >= 70 ? "bg-emerald-400" : healthScore >= 50 ? "bg-amber-400" : "bg-red-400"}`} />
+                            {healthScore >= 70 ? "Performing Well" : healthScore >= 50 ? "Needs Attention" : "Underperforming"}
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+                          {/* Key Wins */}
+                          <div className="bg-white/5 rounded-xl p-4">
+                            <div className="flex items-center gap-1.5 mb-3">
+                              <span className="text-sm">🏆</span>
+                              <span className="text-xs font-bold text-emerald-400 uppercase tracking-wide">Key Wins</span>
+                            </div>
+                            <div className="space-y-2">
+                              {(([
+                                prevTotal > 0 && totalChannelSessions > prevTotal ? `Traffic up by ${((totalChannelSessions - prevTotal) / prevTotal * 100).toFixed(0)}% (${fmt(totalChannelSessions)} sessions)` : null,
+                                organicPctChange !== null && organicPctChange > 0 ? `Organic sessions up ${organicPctChange.toFixed(0)}%` : null,
+                                referralPctChange !== null && referralPctChange > 20 ? `Referral traffic up ${referralPctChange.toFixed(0)}%` : null,
+                                channels.filter(c => c.sessions > 10 && c.engagementRate > 60).length > 0 ? `${channels.filter(c => c.sessions > 10 && c.engagementRate > 60).length} high-engagement channels` : null,
+                              ]) as (string|null)[]).filter((s): s is string => !!s).slice(0, 3).map((w, i) => (
+                                <div key={i} className="flex items-start gap-2">
+                                  <span className="text-emerald-400 text-xs mt-0.5 shrink-0">✓</span>
+                                  <p className="text-xs text-slate-300 leading-snug">{w}</p>
+                                </div>
+                              ))}
+                              {(([prevTotal > 0 && totalChannelSessions > prevTotal, organicPctChange !== null && organicPctChange > 0, referralPctChange !== null && referralPctChange > 20]).filter(Boolean).length === 0) && (
+                                <p className="text-xs text-slate-400">Maintain current traffic levels.</p>
+                              )}
+                            </div>
+                          </div>
+                          {/* Needs Attention */}
+                          <div className="bg-white/5 rounded-xl p-4">
+                            <div className="flex items-center gap-1.5 mb-3">
+                              <span className="text-sm">⚠️</span>
+                              <span className="text-xs font-bold text-amber-400 uppercase tracking-wide">Needs Attention</span>
+                            </div>
+                            <div className="space-y-2">
+                              {(([
+                                directShare > 55 ? `High direct traffic (${Math.round(directShare)}%)` : null,
+                                avgEngRate < 47 ? `Engagement rate low (${avgEngRate.toFixed(0)}%)` : null,
+                                declined.length > 0 ? `${declined[0].channel} declining` : null,
+                                organicPctChange !== null && organicPctChange < -5 ? `Organic dropped ${Math.abs(organicPctChange).toFixed(0)}%` : null,
+                              ]) as (string|null)[]).filter((s): s is string => !!s).slice(0, 3).map((w, i) => (
+                                <div key={i} className="flex items-start gap-2">
+                                  <span className="text-amber-400 text-xs mt-0.5 shrink-0">!</span>
+                                  <p className="text-xs text-slate-300 leading-snug">{w}</p>
+                                </div>
+                              ))}
+                              {(([directShare > 55, avgEngRate < 47, declined.length > 0]).filter(Boolean).length === 0) && (
+                                <p className="text-xs text-slate-400">All channels performing well.</p>
+                              )}
+                            </div>
+                          </div>
+                          {/* What We're Doing */}
+                          <div className="bg-white/5 rounded-xl p-4">
+                            <div className="flex items-center gap-1.5 mb-3">
+                              <span className="text-sm">⚙️</span>
+                              <span className="text-xs font-bold text-blue-400 uppercase tracking-wide">{"What We're Doing"}</span>
+                            </div>
+                            <div className="space-y-2">
+                              {[
+                                directShare > 55 ? "Auditing traffic attribution" : "Monitoring channel mix",
+                                organic ? "Optimising top landing pages" : "Building organic presence",
+                                avgEngRate < 50 ? "Improving mobile experience" : "Converting engaged visitors",
+                              ].map((a, i) => (
+                                <div key={i} className="flex items-start gap-2">
+                                  <div className="w-3.5 h-3.5 rounded-full bg-blue-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                                    <div className="w-1 h-1 rounded-full bg-blue-400" />
+                                  </div>
+                                  <p className="text-xs text-slate-300 leading-snug">{a}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                          {/* Expected Impact */}
+                          <div className="bg-white/5 rounded-xl p-4">
+                            <div className="flex items-center gap-1.5 mb-3">
+                              <span className="text-sm">📈</span>
+                              <span className="text-xs font-bold text-purple-400 uppercase tracking-wide">Expected Impact</span>
+                            </div>
+                            <div className="space-y-2">
+                              {[
+                                directShare > 55 ? "More accurate channel data" : "Sustained traffic growth",
+                                "Higher organic engagement",
+                                "Better conversion rate",
+                              ].map((a, i) => (
+                                <div key={i} className="flex items-start gap-2">
+                                  <div className="w-3.5 h-3.5 rounded-full bg-purple-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                                    <div className="w-1 h-1 rounded-full bg-purple-400" />
+                                  </div>
+                                  <p className="text-xs text-slate-300 leading-snug">{a}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between border-t border-white/10 pt-4">
+                          <p className="text-xs text-slate-400 italic leading-relaxed max-w-sm">
+                            {totalChannelSessions > 0
+                              ? `"Traffic is ${prevTotal > 0 && totalChannelSessions > prevTotal ? "growing well" : "holding steady"}. Let's focus on improving ${avgEngRate < 50 ? "engagement and conversion" : "conversion and retention"}."`
+                              : "Connect Google Analytics 4 to see your website summary."}
+                          </p>
+                          <div className="text-right shrink-0 ml-4">
+                            <div className="text-2xl font-bold tabular-nums">{fmt(totalChannelSessions)}</div>
+                            <div className="text-xs text-slate-400">Total sessions</div>
+                            {prevTotal > 0 && (
+                              <div className={`text-xs font-bold mt-0.5 ${totalChannelSessions >= prevTotal ? "text-emerald-400" : "text-red-400"}`}>
+                                {totalChannelSessions >= prevTotal ? "↑" : "↓"}{Math.abs(((totalChannelSessions - prevTotal) / prevTotal) * 100).toFixed(1)}% vs last month
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* ── Right Sidebar — 3 cols ── */}
+                    <div className="col-span-12 xl:col-span-3 space-y-3">
+
+                      {/* Key Insights */}
+                      <div className="bg-white border border-slate-200 rounded-xl p-4">
+                        <div className="flex items-center gap-1.5 mb-3">
+                          <svg className="w-3.5 h-3.5 text-purple-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/></svg>
+                          <span className="text-xs font-bold text-slate-900">Key Insights</span>
+                          <span className="text-xs bg-purple-100 text-purple-700 font-bold px-1.5 py-0.5 rounded ml-0.5">AI</span>
+                        </div>
+                        <div className="space-y-3">
+                          {structuredInsights.slice(0, 3).map((ins, i) => (
+                            <div key={i} className="flex gap-2.5">
+                              <div className={`w-5 h-5 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${ins.type === "alert" ? "bg-red-100" : ins.type === "positive" ? "bg-emerald-100" : "bg-amber-100"}`}>
+                                {ins.type === "alert" && <svg className="w-3 h-3 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>}
+                                {ins.type === "positive" && <svg className="w-3 h-3 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path d="M7 17L17 7M7 7h10v10"/></svg>}
+                                {ins.type === "warning" && <svg className="w-3 h-3 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path d="M17 7L7 17M17 7H7v10"/></svg>}
+                              </div>
+                              <div>
+                                <div className="text-xs font-semibold text-slate-800 leading-snug">{ins.title}</div>
+                                <p className="text-xs text-slate-500 leading-relaxed mt-0.5">{ins.desc}</p>
+                              </div>
+                            </div>
+                          ))}
+                          {structuredInsights.length === 0 && <p className="text-xs text-slate-400">Connect Google Analytics to see AI-powered insights.</p>}
+                        </div>
+                        <div className="mt-3 pt-3 border-t border-slate-100">
+                          <button className="text-xs text-blue-600 font-medium hover:text-blue-700 flex items-center gap-1">
+                            View detailed insights <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Recommended Actions */}
+                      <div className="bg-white border border-slate-200 rounded-xl p-4">
+                        <div className="flex items-center gap-1.5 mb-3">
+                          <svg className="w-3.5 h-3.5 text-blue-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                          <span className="text-xs font-bold text-slate-900">Recommended Actions</span>
+                        </div>
+                        <div className="space-y-3">
+                          {numberedActions.slice(0, 3).map((a, i) => (
+                            <div key={i} className="flex gap-2.5">
+                              <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 text-xs font-bold text-white ${i === 0 ? "bg-blue-500" : i === 1 ? "bg-blue-400" : "bg-blue-300"}`}>{i + 1}</div>
+                              <div>
+                                <div className="text-xs font-semibold text-slate-800">{a.title}</div>
+                                <p className="text-xs text-slate-500 leading-relaxed mt-0.5">{a.desc}</p>
+                              </div>
+                            </div>
                           ))}
                         </div>
                       </div>
-                      <svg viewBox={`0 0 ${chartW + 46} ${chartH + 28}`} className="w-full" style={{ height: 200 }}>
-                        {yTicks.map((v, i) => (
-                          <g key={i}>
-                            <line x1="38" y1={6 + (1 - v / maxY) * chartH} x2={chartW + 38} y2={6 + (1 - v / maxY) * chartH} stroke="#F1F5F9" strokeWidth="1" />
-                            <text x="34" y={10 + (1 - v / maxY) * chartH} textAnchor="end" fontSize="9" fill="#94A3B8">{fmtK(v)}</text>
-                          </g>
-                        ))}
-                        <g transform="translate(38,6)">
-                          <path d={svgArea(totalTrend, maxY, chartW, chartH)} fill="#334155" fillOpacity="0.04" />
-                          <path d={svgLine(totalTrend, maxY, chartW, chartH)} fill="none" stroke="#334155" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                          <path d={svgLine(organicTrend, maxY, chartW, chartH)} fill="none" stroke="#10B981" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                          <path d={svgLine(directTrend, maxY, chartW, chartH)} fill="none" stroke="#3B82F6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                          <path d={svgLine(referralTrend, maxY, chartW, chartH)} fill="none" stroke="#F59E0B" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                        </g>
-                        {[0, Math.floor(trendPts / 4), Math.floor(trendPts / 2), Math.floor(trendPts * 3 / 4), trendPts - 1].map((di, i) => {
-                          const d = new Date(); d.setDate(d.getDate() - (trendPts - 1 - di))
-                          return <text key={i} x={38 + (di / (trendPts - 1)) * chartW} y={chartH + 22} textAnchor="middle" fontSize="9" fill="#94A3B8">{d.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</text>
-                        })}
-                      </svg>
-                    </div>
 
-                    {/* Traffic Distribution Donut */}
-                    <div className="col-span-12 lg:col-span-2 bg-white border border-slate-200 rounded-xl p-5">
-                      <div className="text-sm font-semibold text-slate-900">Traffic Distribution</div>
-                      <div className="text-xs text-slate-400 mb-3">Last {trafficPeriod === "7D" ? "7 days" : trafficPeriod === "90D" ? "90 days" : "30 days"}</div>
-                      <div className="flex justify-center mb-3">
-                        <svg viewBox="0 0 160 160" width="130" height="130">
-                          <circle cx="80" cy="80" r="54" fill="none" stroke="#F1F5F9" strokeWidth="22" />
-                          {donutSegments.map((seg, i) => (
-                            <circle key={i} cx="80" cy="80" r="54" fill="none" stroke={seg.color} strokeWidth="22"
-                              strokeDasharray={`${seg.dash} ${seg.gap}`} strokeDashoffset={seg.offset} transform="rotate(-90 80 80)" />
-                          ))}
-                          <text x="80" y="75" textAnchor="middle" fontSize="17" fontWeight="bold" fill="#0F172A">{fmt(totalChannelSessions)}</text>
-                          <text x="80" y="90" textAnchor="middle" fontSize="8.5" fill="#94A3B8">Total Sessions</text>
-                        </svg>
-                      </div>
-                      <div className="space-y-1.5">
-                        {donutSegments.map(ch => (
-                          <div key={ch.channel} className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              <div className="w-2 h-2 rounded-full shrink-0" style={{ background: ch.color }} />
-                              <span className="text-xs text-slate-600 truncate">{ch.channel}</span>
-                            </div>
-                            <span className="text-xs font-semibold text-slate-700 tabular-nums shrink-0">{ch.pct.toFixed(0)}%</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Intelligence Panel */}
-                    <div className="col-span-12 lg:col-span-3 bg-white border border-slate-200 rounded-xl p-5 space-y-4">
-                      <div>
-                        <div className="flex items-center gap-1.5 mb-2.5">
-                          <svg className="w-3.5 h-3.5 text-purple-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/></svg>
-                          <span className="text-xs font-bold text-purple-600 uppercase tracking-wide">Key Insights</span>
+                      {/* Top Opportunities */}
+                      <div className="bg-white border border-slate-200 rounded-xl p-4">
+                        <div className="flex items-center gap-1.5 mb-3">
+                          <svg className="w-3.5 h-3.5 text-amber-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                          <span className="text-xs font-bold text-slate-900">Top Opportunities</span>
                         </div>
                         <div className="space-y-2.5">
-                          {insights.map((ins, i) => (
-                            <div key={i} className="flex gap-2">
-                              <div className={`w-3.5 h-3.5 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${i === 0 ? "bg-emerald-100" : i === 1 ? "bg-amber-100" : "bg-red-100"}`}>
-                                <div className={`w-1.5 h-1.5 rounded-full ${i === 0 ? "bg-emerald-500" : i === 1 ? "bg-amber-500" : "bg-red-500"}`} />
-                              </div>
-                              <p className="text-xs text-slate-600 leading-relaxed">{ins}</p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="border-t border-slate-100" />
-                      <div>
-                        <div className="flex items-center gap-1.5 mb-2.5">
-                          <svg className="w-3.5 h-3.5 text-blue-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                          <span className="text-xs font-bold text-blue-600 uppercase tracking-wide">Recommended Actions</span>
-                        </div>
-                        <div className="space-y-2">
-                          {actions.slice(0, 4).map((a, i) => (
-                            <div key={i} className="flex gap-1.5">
-                              <span className="text-slate-400 text-xs shrink-0 mt-0.5">›</span>
-                              <p className="text-xs text-slate-600 leading-relaxed">{a}</p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="border-t border-slate-100" />
-                      <div>
-                        <div className="flex items-center gap-1.5 mb-2.5">
-                          <svg className="w-3.5 h-3.5 text-amber-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                          <span className="text-xs font-bold text-amber-600 uppercase tracking-wide">Top Opportunities</span>
-                        </div>
-                        <div className="space-y-2">
-                          {(dynOpps.length > 0 ? dynOpps : [{ title: "Keep up the momentum", p: "Good", pc: "text-green-600 bg-green-50 border-green-100", desc: "All channels are performing well. Focus on content quality and maintaining backlink growth." }]).map((opp, i) => (
+                          {dynOpps.map((opp, i) => (
                             <div key={i} className="border border-slate-100 rounded-lg p-2.5 hover:border-slate-200 transition-colors">
                               <div className="flex items-center justify-between gap-1 mb-1">
                                 <span className="text-xs font-semibold text-slate-800">{opp.title}</span>
-                                <span className={`text-xs font-bold px-1.5 py-0.5 rounded border ${opp.pc}`}>{opp.p}</span>
+                                <span className={`text-xs font-bold px-1.5 py-0.5 rounded border shrink-0 ${opp.pc}`}>{opp.p}</span>
                               </div>
                               <p className="text-xs text-slate-500 leading-snug">{opp.desc}</p>
+                              {opp.impact && <p className="text-xs font-semibold text-blue-600 mt-1">{opp.impact}</p>}
                             </div>
                           ))}
                         </div>
                       </div>
-                    </div>
-                  </div>
 
-                  {/* ── Section 5: Traffic by Channel table ── */}
-                  <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-                    <div className="px-5 py-4 border-b border-slate-100">
-                      <div className="text-sm font-semibold text-slate-900">Traffic Channel Performance</div>
-                      <div className="text-xs text-slate-400 mt-0.5">Sessions, share and health across all acquisition channels</div>
-                    </div>
-                    {channels.length === 0 ? (
-                      <div className="py-12 text-center text-sm text-slate-400">No channel data available for this period</div>
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <table className="w-full">
-                          <thead>
-                            <tr className="border-b border-slate-100 bg-slate-50/80">
-                              <th className="text-left text-xs font-semibold text-slate-500 px-5 py-3 min-w-[160px]">Channel</th>
-                              <th className="text-right text-xs font-semibold text-slate-500 px-4 py-3">Sessions</th>
-                              {compare && <th className="text-right text-xs font-semibold text-blue-400 px-4 py-3 bg-blue-50/50">Prev Sessions</th>}
-                              <th className="text-right text-xs font-semibold text-slate-500 px-4 py-3">Share %</th>
-                              <th className="text-right text-xs font-semibold text-slate-500 px-4 py-3">Growth %</th>
-                              <th className="text-center text-xs font-semibold text-slate-500 px-4 py-3">Health</th>
-                              <th className="text-right text-xs font-semibold text-slate-500 px-5 py-3">Engagement Rate</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {channels.map((ch, i) => {
-                              const share = totalChannelSessions ? (ch.sessions / totalChannelSessions) * 100 : 0
-                              const change = pct(ch.sessions, ch.prevSessions)
-                              const health = healthBadge(change, ch.engagementRate)
+                      {/* Country Breakdown */}
+                      {countries.length > 0 && (
+                        <div className="bg-white border border-slate-200 rounded-xl p-4">
+                          <div className="text-xs font-bold text-slate-900 mb-3">Country Breakdown</div>
+                          <div className="space-y-2">
+                            {countries.slice(0, 5).map(c => {
+                              const t = countries.reduce((s, x) => s + x.sessions, 0)
+                              const sp = t ? (c.sessions / t) * 100 : 0
                               return (
-                                <tr key={ch.channel} className="border-b border-slate-50 hover:bg-blue-50/30 transition-colors">
-                                  <td className="px-5 py-3.5">
-                                    <div className="flex items-center gap-2.5">
-                                      <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${chColor(ch.channel)}18` }}>
-                                        <div className="w-2.5 h-2.5 rounded-full" style={{ background: chColor(ch.channel) }} />
-                                      </div>
-                                      <div>
-                                        <div className="text-xs font-semibold text-slate-800">{ch.channel}</div>
-                                        <div className="h-1 bg-slate-100 rounded-full mt-1 overflow-hidden" style={{ width: 56 }}>
-                                          <div className="h-full rounded-full" style={{ width: `${Math.min(100, share)}%`, background: chColor(ch.channel) }} />
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </td>
-                                  <td className="px-4 py-3.5 text-right text-xs font-bold text-slate-800 tabular-nums">{fmt(ch.sessions)}</td>
-                                  {compare && (
-                                    <td className="px-4 py-3.5 text-right bg-blue-50/40">
-                                      <div className="text-xs font-semibold text-blue-700 tabular-nums">{fmt(ch.prevSessions)}</div>
-                                      <div className={`text-xs font-bold tabular-nums ${ch.sessions >= ch.prevSessions ? "text-emerald-500" : "text-red-500"}`}>
-                                        {ch.sessions >= ch.prevSessions ? "↑" : "↓"}{ch.prevSessions > 0 ? `${Math.abs(((ch.sessions - ch.prevSessions) / ch.prevSessions) * 100).toFixed(0)}%` : "—"}
-                                      </div>
-                                    </td>
-                                  )}
-                                  <td className="px-4 py-3.5 text-right text-xs text-slate-600 tabular-nums">{share.toFixed(0)}%</td>
-                                  <td className="px-4 py-3.5 text-right">
-                                    {change !== null ? (
-                                      <span className={`text-xs font-semibold ${change >= 0 ? "text-emerald-600" : "text-red-500"}`}>
-                                        {change >= 0 ? "↑" : "↓"}{Math.abs(change).toFixed(1)}%
-                                      </span>
-                                    ) : <span className="text-xs text-slate-400 font-medium">0.0% Stable</span>}
-                                  </td>
-                                  <td className="px-4 py-3.5 text-center">
-                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold border ${health.cls}`}>{health.label}</span>
-                                  </td>
-                                  <td className="px-5 py-3.5">
-                                    <div className="flex items-center justify-end gap-2">
-                                      <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden" style={{ width: 52 }}>
-                                        <div className="h-full rounded-full" style={{ width: `${ch.engagementRate}%`, background: ch.engagementRate > 50 ? "#10B981" : ch.engagementRate > 30 ? "#F59E0B" : "#EF4444" }} />
-                                      </div>
-                                      <span className={`text-xs font-semibold tabular-nums ${ch.engagementRate > 50 ? "text-emerald-600" : ch.engagementRate > 30 ? "text-amber-600" : "text-red-500"}`}>{Math.min(ch.engagementRate, 100).toFixed(0)}%</span>
-                                    </div>
-                                  </td>
-                                </tr>
+                                <div key={c.country} className="flex items-center gap-2">
+                                  <span className="text-xs shrink-0">🌐</span>
+                                  <span className="text-xs text-slate-600 font-medium truncate flex-1">{c.country}</span>
+                                  <div className="w-14 h-1.5 bg-slate-100 rounded-full overflow-hidden shrink-0">
+                                    <div className="h-full bg-blue-400 rounded-full" style={{ width: `${sp}%` }} />
+                                  </div>
+                                  <span className="text-xs text-slate-500 tabular-nums w-8 text-right shrink-0">{fmt(c.sessions)}</span>
+                                </div>
                               )
                             })}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* ── Section 6: Traffic Quality ── */}
-                  <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-                    <div className="px-5 py-4 border-b border-slate-100">
-                      <div className="text-sm font-semibold text-slate-900">Traffic Quality by Channel</div>
-                      <div className="text-xs text-slate-400 mt-0.5">Higher engagement = better audience fit and content relevance</div>
-                    </div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead>
-                          <tr className="border-b border-slate-100 bg-slate-50/80">
-                            <th className="text-left text-xs font-semibold text-slate-500 px-5 py-3 min-w-[160px]">Channel</th>
-                            <th className="text-left text-xs font-semibold text-slate-500 px-4 py-3 min-w-[160px]">Engagement Rate</th>
-                            <th className="text-right text-xs font-semibold text-slate-500 px-4 py-3">Engaged Sessions</th>
-                            <th className="text-left text-xs font-semibold text-slate-500 px-5 py-3 min-w-[140px]">Bounce Rate</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {channels.map((ch) => {
-                            const eng = ch.engagementRate
-                            const bounce = Math.max(0, 100 - eng)
-                            const engSess = Math.round(ch.sessions * eng / 100)
-                            return (
-                              <tr key={ch.channel} className="border-b border-slate-50 hover:bg-slate-50/60 transition-colors">
-                                <td className="px-5 py-3.5">
-                                  <div className="flex items-center gap-2">
-                                    <div className="w-2 h-2 rounded-full shrink-0" style={{ background: chColor(ch.channel) }} />
-                                    <span className="text-xs font-semibold text-slate-800">{ch.channel}</span>
-                                  </div>
-                                </td>
-                                <td className="px-4 py-3.5">
-                                  <div className="flex items-center gap-2.5">
-                                    <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden" style={{ width: 80 }}>
-                                      <div className="h-full rounded-full" style={{ width: `${eng}%`, background: eng > 50 ? "#10B981" : eng > 30 ? "#F59E0B" : "#EF4444" }} />
-                                    </div>
-                                    <span className={`text-xs font-semibold tabular-nums ${eng > 50 ? "text-emerald-600" : eng > 30 ? "text-amber-600" : "text-red-500"}`}>{Math.min(eng, 100).toFixed(0)}%</span>
-                                  </div>
-                                </td>
-                                <td className="px-4 py-3.5 text-right text-xs text-slate-600 tabular-nums">{fmt(engSess)}</td>
-                                <td className="px-5 py-3.5">
-                                  <div className="flex items-center gap-2.5">
-                                    <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden" style={{ width: 80 }}>
-                                      <div className="h-full rounded-full" style={{ width: `${bounce}%`, background: bounce < 30 ? "#10B981" : bounce < 60 ? "#F59E0B" : "#EF4444" }} />
-                                    </div>
-                                    <span className={`text-xs font-semibold tabular-nums ${bounce < 30 ? "text-emerald-600" : bounce < 60 ? "text-amber-600" : "text-red-500"}`}>{bounce.toFixed(0)}%</span>
-                                  </div>
-                                </td>
-                              </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-
-                  {/* ── Section 7: Executive Summary + Devices ── */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="md:col-span-2 bg-gradient-to-br from-slate-900 to-slate-800 rounded-xl p-6 text-white">
-                      {/* Header row */}
-                      <div className="flex items-center justify-between gap-3 mb-5 flex-wrap">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
-                            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                          </div>
-                          <div>
-                            <div className="text-sm font-bold">Your Website This Month</div>
-                            <div className="text-xs text-slate-400 mt-0.5">Performance summary in plain terms — no jargon</div>
                           </div>
                         </div>
-                        <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold shrink-0 ${healthScore >= 70 ? "bg-emerald-500/20 text-emerald-400" : healthScore >= 50 ? "bg-amber-500/20 text-amber-400" : "bg-red-500/20 text-red-400"}`}>
-                          <div className={`w-1.5 h-1.5 rounded-full ${healthScore >= 70 ? "bg-emerald-400" : healthScore >= 50 ? "bg-amber-400" : "bg-red-400"}`} />
-                          {healthScore >= 70 ? "Performing Well" : healthScore >= 50 ? "Needs Attention" : "Underperforming"}
-                        </div>
-                      </div>
-                      {/* Three client-friendly blocks */}
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      )}
 
-                        {/* Block 1: Your Audience */}
-                        <div className="bg-white/5 rounded-xl p-4">
-                          <div className="flex items-center gap-2 mb-3">
-                            <div className="w-6 h-6 rounded-lg bg-blue-500/20 flex items-center justify-center shrink-0">
-                              <svg className="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-                            </div>
-                            <span className="text-xs font-bold text-blue-400 uppercase tracking-wide">Your Audience</span>
-                          </div>
-                          <div className="text-3xl font-bold mb-0.5 tabular-nums">{fmt(totalChannelSessions)}</div>
-                          <div className="text-xs text-slate-400 mb-3 flex items-center gap-1.5 flex-wrap">
-                            <span>visitors this period</span>
-                            {prevTotal > 0 && (
-                              <span className={`font-bold ${totalChannelSessions >= prevTotal ? "text-emerald-400" : "text-red-400"}`}>
-                                {totalChannelSessions >= prevTotal ? "↑" : "↓"}{Math.abs(((totalChannelSessions - prevTotal) / prevTotal) * 100).toFixed(0)}% vs last period
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs text-slate-300 leading-relaxed">
-                            {top
-                              ? top.channel === "Direct"
-                                ? `${Math.round((top.sessions / (totalChannelSessions || 1)) * 100)}% of your visitors came directly — people who already know your brand, bookmarked your site, or typed your URL.`
-                                : top.channel === "Organic Search"
-                                ? `${Math.round((top.sessions / (totalChannelSessions || 1)) * 100)}% of your visitors found you on Google — people actively searching for what you offer. That's a strong signal.`
-                                : `${Math.round((top.sessions / (totalChannelSessions || 1)) * 100)}% of visitors came via ${top.channel}. See the channel table above for the full breakdown.`
-                              : "Connect Google Analytics to see where your visitors are coming from."}
-                          </p>
-                        </div>
-
-                        {/* Block 2: What's Working */}
-                        <div className="bg-white/5 rounded-xl p-4">
-                          <div className="flex items-center gap-2 mb-3">
-                            <div className="w-6 h-6 rounded-lg bg-emerald-500/20 flex items-center justify-center shrink-0">
-                              <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                            </div>
-                            <span className="text-xs font-bold text-emerald-400 uppercase tracking-wide">{"What's Working"}</span>
-                          </div>
+                      {/* Device Breakdown */}
+                      {devices.length > 0 && (
+                        <div className="bg-white border border-slate-200 rounded-xl p-4">
+                          <div className="text-xs font-bold text-slate-900 mb-3">Device Breakdown</div>
                           <div className="space-y-2.5">
-                            {([
-                              organic && organic.engagementRate > 40
-                                ? `People finding you on Google are engaged (${organic.engagementRate.toFixed(0)}% engagement rate) — your content is attracting the right audience.`
-                                : null,
-                              direct && direct.sessions > 0
-                                ? `${fmt(direct.sessions)} people visited directly — strong brand recall and returning customer behaviour.`
-                                : null,
-                              channels.filter(c => c.sessions > 0 && c.engagementRate > 50).length > 0
-                                ? `${channels.filter(c => c.engagementRate > 50).slice(0, 2).map(c => c.channel).join(" and ")} visitors spend quality time on your site — they're genuinely interested.`
-                                : null,
-                            ] as (string | null)[]).filter((s): s is string => !!s).slice(0, 3).map((signal, i) => (
-                              <div key={i} className="flex gap-2">
-                                <div className="w-4 h-4 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0 mt-0.5">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                            {devices.map(d => {
+                              const t = devices.reduce((s, x) => s + x.sessions, 0)
+                              const sp = t ? (d.sessions / t) * 100 : 0
+                              const devIcons: Record<string, string> = { desktop: "🖥️", mobile: "📱", tablet: "📲", "smart tv": "📺" }
+                              const devColors: Record<string, string> = { desktop: "#6366F1", mobile: "#8B5CF6", tablet: "#A78BFA", "smart tv": "#C4B5FD" }
+                              return (
+                                <div key={d.device} className="flex items-center gap-2">
+                                  <span className="text-sm w-5 shrink-0">{devIcons[d.device.toLowerCase()] ?? "💻"}</span>
+                                  <span className="text-xs w-14 capitalize text-slate-600 font-medium shrink-0">{d.device}</span>
+                                  <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                    <div className="h-full rounded-full" style={{ width: `${sp}%`, background: devColors[d.device.toLowerCase()] ?? brand }} />
+                                  </div>
+                                  <span className="text-xs text-slate-500 tabular-nums w-7 text-right shrink-0">{sp.toFixed(0)}%</span>
                                 </div>
-                                <p className="text-xs text-slate-300 leading-relaxed">{signal}</p>
-                              </div>
-                            ))}
-                            {channels.length === 0 && <p className="text-xs text-slate-400">Connect GA4 to see positive performance signals.</p>}
+                              )
+                            })}
                           </div>
                         </div>
-
-                        {/* Block 3: What We're Doing */}
-                        <div className="bg-white/5 rounded-xl p-4">
-                          <div className="flex items-center gap-2 mb-3">
-                            <div className="w-6 h-6 rounded-lg bg-purple-500/20 flex items-center justify-center shrink-0">
-                              <svg className="w-3.5 h-3.5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                            </div>
-                            <span className="text-xs font-bold text-purple-400 uppercase tracking-wide">{"What We're Doing"}</span>
-                          </div>
-                          <div className="space-y-2.5">
-                            {([
-                              declined.length > 0
-                                ? `Investigating why ${declined.slice(0, 2).map(c => c.channel).join(" and ")} traffic dropped and building a recovery plan to win it back.`
-                                : "Maintaining performance across all channels and identifying new growth opportunities.",
-                              organic && pct(organic.sessions, organic.prevSessions) !== null && ((pct(organic.sessions, organic.prevSessions) as number) < 0)
-                                ? "Reviewing your top Google landing pages and optimising them to recover and improve search rankings."
-                                : "Identifying new keyword opportunities to bring more high-intent visitors from Google.",
-                              avgEngRate < 50
-                                ? "Analysing pages where visitors leave quickly and improving them to keep people engaged longer."
-                                : "Focusing on converting your high-engagement audience into enquiries and leads.",
-                            ] as string[]).map((action, i) => (
-                              <div key={i} className="flex gap-2">
-                                <span className="text-purple-400 shrink-0 font-bold text-sm leading-none mt-0.5">→</span>
-                                <p className="text-xs text-slate-300 leading-relaxed">{action}</p>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                      </div>
-                    </div>
-                    <div className="bg-white border border-slate-200 rounded-xl p-5">
-                      <div className="text-sm font-semibold text-slate-900 mb-3">Device Breakdown</div>
-                      <div className="space-y-2.5">
-                        {devices.map(d => {
-                          const t = devices.reduce((s, x) => s + x.sessions, 0)
-                          const sp = t ? (d.sessions / t) * 100 : 0
-                          const devIcons: Record<string, string> = { desktop: "🖥️", mobile: "📱", tablet: "📲" }
-                          return (
-                            <div key={d.device} className="flex items-center gap-2.5">
-                              <span className="text-sm w-5 shrink-0">{devIcons[d.device.toLowerCase()] ?? "💻"}</span>
-                              <span className="text-xs w-12 capitalize text-slate-600 font-medium shrink-0">{d.device}</span>
-                              <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                <div className="h-full rounded-full" style={{ width: `${sp}%`, background: brand }} />
-                              </div>
-                              <span className="text-xs text-slate-500 tabular-nums w-7 text-right shrink-0">{sp.toFixed(0)}%</span>
-                            </div>
-                          )
-                        })}
-                      </div>
-                      <div className="border-t border-slate-100 mt-4 pt-4">
-                        <div className="text-sm font-semibold text-slate-900 mb-3">Top Countries</div>
-                        <div className="space-y-2">
-                          {countries.slice(0, 5).map(c => {
-                            const t = countries.reduce((s, x) => s + x.sessions, 0)
-                            const sp = t ? (c.sessions / t) * 100 : 0
-                            return (
-                              <div key={c.country} className="flex items-center gap-2">
-                                <span className="text-xs text-slate-600 font-medium truncate" style={{ width: 90 }}>{c.country}</span>
-                                <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                  <div className="h-full bg-slate-400 rounded-full" style={{ width: `${sp}%` }} />
-                                </div>
-                                <span className="text-xs text-slate-400 tabular-nums w-10 text-right shrink-0">{fmt(c.sessions)}</span>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </div>
+                      )}
                     </div>
                   </div>
 
