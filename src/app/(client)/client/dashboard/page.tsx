@@ -174,8 +174,10 @@ function calcHealthScore(gsc: GSCTotals | undefined, ga4: Partial<GA4Totals> | u
   let weighted = 0, totalWeight = 0
 
   if (gsc && gsc.impressions > 0) {
-    // CTR scoring — 1%+ is reasonable for competitive SEO markets
-    const ctrScore = gsc.ctr >= 5 ? 100 : gsc.ctr >= 3 ? 80 : gsc.ctr >= 2 ? 62 : gsc.ctr >= 1 ? 55 : gsc.ctr >= 0.5 ? 40 : 15
+    // CTR scoring — 1%+ is reasonable for competitive SEO markets.
+    // Score the CTR as displayed (2dp) so "1.00%" never lands in the <1% band.
+    const ctr = Math.round(gsc.ctr * 100) / 100
+    const ctrScore = ctr >= 5 ? 100 : ctr >= 3 ? 80 : ctr >= 2 ? 62 : ctr >= 1 ? 55 : ctr >= 0.5 ? 40 : 15
     comps.push({ label: "Click-Through Rate", value: gsc.ctr, score: ctrScore })
     weighted += ctrScore * 10; totalWeight += 10
 
@@ -197,6 +199,15 @@ function calcHealthScore(gsc: GSCTotals | undefined, ga4: Partial<GA4Totals> | u
     const engScore = eng >= 70 ? 100 : eng >= 55 ? 80 : eng >= 40 ? 62 : eng >= 25 ? 40 : 20
     comps.push({ label: "Engagement Rate", value: eng, score: engScore })
     weighted += engScore * 20; totalWeight += 20
+
+    // Visitor growth — total site audience (all channels), same users metric as the benchmark panel
+    const prevUsers = ga4.prevUsers ?? 0
+    if (prevUsers > 0) {
+      const vGrowth = (((ga4.users ?? 0) - prevUsers) / prevUsers) * 100
+      const vGrowthScore = vGrowth > 30 ? 100 : vGrowth > 10 ? 80 : vGrowth > 0 ? 65 : vGrowth > -10 ? 50 : vGrowth > -30 ? 30 : 10
+      comps.push({ label: "Visitor Growth", value: vGrowth, score: vGrowthScore })
+      weighted += vGrowthScore * 10; totalWeight += 10
+    }
   }
 
   const aiScore = (aiTraffic && aiTraffic.total > 0) ? 80 : 20
@@ -226,7 +237,8 @@ function calcHealthScore(gsc: GSCTotals | undefined, ga4: Partial<GA4Totals> | u
       blScore = 60 // neutral — first month or no comparison
     } else {
       const ratio = blCurr / blPrev
-      blScore = ratio >= 1 ? 80 : ratio >= 0.75 ? 60 : ratio >= 0.5 ? 40 : 20
+      // Same thresholds as the benchmark panel: ≥1.2× = Excellent, ≥1× = Good
+      blScore = ratio >= 1.2 ? 100 : ratio >= 1 ? 80 : ratio >= 0.75 ? 60 : ratio >= 0.5 ? 40 : 20
     }
     comps.push({ label: "Backlinks", value: blCurr, score: blScore })
     weighted += blScore * 12; totalWeight += 12
@@ -258,6 +270,7 @@ function getScoreChangeReason(
   if (label === "Average Position") return `Google Ranking slipped from position ${prevValue.toFixed(1)} to ${currValue.toFixed(1)}`
   if (label === "Click-Through Rate") return `Click rate dropped from ${prevValue.toFixed(1)}% to ${currValue.toFixed(1)}%`
   if (label === "Traffic Growth") return `Organic traffic declined vs previous period`
+  if (label === "Visitor Growth") return `Fewer visitors reached the site vs previous period`
   if (label === "Engagement Rate") return `Visitor engagement dropped to ${currValue.toFixed(0)}%`
   if (label === "Keyword Rankings") return `Keyword rankings weakened this month`
   if (label === "Backlinks") return `Fewer backlinks were built this month vs last month`
@@ -609,13 +622,14 @@ function HealthScoreCard({ score, label, color, comps, onTabClick }: {
     "Click-Through Rate": "overview",
     "Average Position": "overview",
     "Traffic Growth": "traffic",
+    "Visitor Growth": "traffic",
     "Engagement Rate": "engagement",
     "AI Visibility": "ai",
   }
   function formatVal(lbl: string, value: number): string {
     if (lbl === "Click-Through Rate") return `${value.toFixed(2)}%`
     if (lbl === "Average Position") return value > 0 ? value.toFixed(1) : "—"
-    if (lbl === "Traffic Growth") return `${value >= 0 ? "+" : ""}${value.toFixed(0)}%`
+    if (lbl === "Traffic Growth" || lbl === "Visitor Growth") return `${value >= 0 ? "+" : ""}${value.toFixed(0)}%`
     if (lbl === "Engagement Rate") return `${value.toFixed(0)}%`
     if (lbl === "AI Visibility") return value > 0 ? `${value.toLocaleString()} sessions` : "None yet"
     return String(value)
@@ -1248,7 +1262,7 @@ function PremiumHealthCard({ score, gsc, ga4, multiPs, monthLabel, prevScore, pr
                 const icon = isGood ? "✅" : isWarn ? "⚠️" : "❌"
                 const valDisplay = c.label === "Average Position" ? `Pos ${c.value.toFixed(1)}`
                   : c.label === "Click-Through Rate" ? `${c.value.toFixed(2)}%`
-                  : c.label === "Traffic Growth" ? `${c.value >= 0 ? "+" : ""}${c.value.toFixed(1)}%`
+                  : c.label === "Traffic Growth" || c.label === "Visitor Growth" ? `${c.value >= 0 ? "+" : ""}${c.value.toFixed(1)}%`
                   : c.label === "Engagement Rate" ? `${c.value.toFixed(0)}%`
                   : c.label === "Backlinks" ? `${Math.round(c.value)} built`
                   : `${c.value.toFixed(0)}`
