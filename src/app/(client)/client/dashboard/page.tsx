@@ -169,7 +169,7 @@ function downloadCSV(filename: string, headers: string[], rows: (string | number
 
 // ─── Health Score ─────────────────────────────────────────────────────────────
 
-function calcHealthScore(gsc: GSCTotals | undefined, ga4: Partial<GA4Totals> | undefined, aiTraffic: AITrafficData | null | undefined, rankingRows: RankingRow[] = [], backlinks?: { current: number | null; previous: number | null }) {
+function calcHealthScore(gsc: GSCTotals | undefined, ga4: Partial<GA4Totals> | undefined, aiTraffic: AITrafficData | null | undefined, rankingRows: RankingRow[] = [], backlinks?: { current: number | null; previous: number | null }, siteAudit?: SiteAuditResult | null) {
   const comps: { label: string; value: number; score: number }[] = []
   let weighted = 0, totalWeight = 0
 
@@ -244,6 +244,17 @@ function calcHealthScore(gsc: GSCTotals | undefined, ga4: Partial<GA4Totals> | u
     weighted += blScore * 12; totalWeight += 12
   }
 
+  // Technical SEO — crawlability (robots.txt), indexability (sitemap) and structured data
+  if (siteAudit) {
+    const checks = [...siteAudit.robots.checks, ...siteAudit.sitemap.checks, ...siteAudit.schema.checks]
+    if (checks.length > 0) {
+      const passed = checks.filter(c => c.status === "ok").length
+      const techScore = Math.round(checks.reduce((s, c) => s + (c.status === "ok" ? 100 : c.status === "warn" ? 50 : 0), 0) / checks.length)
+      comps.push({ label: "Technical SEO", value: passed, score: techScore })
+      weighted += techScore * 10; totalWeight += 10
+    }
+  }
+
   const score = totalWeight > 0 ? Math.round(weighted / totalWeight) : 0
   const label = score >= 85 ? "Excellent" : score >= 70 ? "Good" : score >= 50 ? "Fair" : "Needs Work"
   const color = score >= 85 ? "#16a34a" : score >= 70 ? "#2563eb" : score >= 50 ? "#d97706" : "#dc2626"
@@ -274,6 +285,7 @@ function getScoreChangeReason(
   if (label === "Engagement Rate") return `Visitor engagement dropped to ${currValue.toFixed(0)}%`
   if (label === "Keyword Rankings") return `Keyword rankings weakened this month`
   if (label === "Backlinks") return `Fewer backlinks were built this month vs last month`
+  if (label === "Technical SEO") return `New technical SEO issues were found on the site`
   return `${label} performance declined`
 }
 
@@ -625,12 +637,14 @@ function HealthScoreCard({ score, label, color, comps, onTabClick }: {
     "Visitor Growth": "traffic",
     "Engagement Rate": "engagement",
     "AI Visibility": "ai",
+    "Technical SEO": "health",
   }
   function formatVal(lbl: string, value: number): string {
     if (lbl === "Click-Through Rate") return `${value.toFixed(2)}%`
     if (lbl === "Average Position") return value > 0 ? value.toFixed(1) : "—"
     if (lbl === "Traffic Growth" || lbl === "Visitor Growth") return `${value >= 0 ? "+" : ""}${value.toFixed(0)}%`
     if (lbl === "Engagement Rate") return `${value.toFixed(0)}%`
+    if (lbl === "Technical SEO") return `${value} checks passed`
     if (lbl === "AI Visibility") return value > 0 ? `${value.toLocaleString()} sessions` : "None yet"
     return String(value)
   }
@@ -1265,6 +1279,7 @@ function PremiumHealthCard({ score, gsc, ga4, multiPs, monthLabel, prevScore, pr
                   : c.label === "Traffic Growth" || c.label === "Visitor Growth" ? `${c.value >= 0 ? "+" : ""}${c.value.toFixed(1)}%`
                   : c.label === "Engagement Rate" ? `${c.value.toFixed(0)}%`
                   : c.label === "Backlinks" ? `${Math.round(c.value)} built`
+                  : c.label === "Technical SEO" ? `${Math.round(c.value)} checks passed`
                   : `${c.value.toFixed(0)}`
                 return (
                   <div key={c.label} className={`flex items-center gap-2 px-3 py-1.5 text-xs ${i < comps.length - 1 ? "border-b border-slate-50" : ""} ${!isGood && !isWarn ? "bg-red-50" : ""}`}>
@@ -1444,7 +1459,11 @@ export default function ClientDashboard() {
       fetch(`/api/client/data?startDate=${fmtDate(prevStart)}&endDate=${fmtDate(prevEnd)}`).then(r => r.json()),
       fetch("/api/client/rankings").then(r => r.json()).catch(() => ({ data: [], config: null })),
       fetch("/api/client/backlinks").then(r => r.json()).catch(() => ({ months: [] })),
-    ]).then(([currData, prevData, rankData, blData]) => {
+      fetch("/api/client/site-audit").then(r => r.json()).catch(() => null),
+    ]).then(([currData, prevData, rankData, blData, auditData]) => {
+      // Site audit reflects the site's current state, so it applies to both periods
+      const audit = auditData && !auditData.error ? auditData as SiteAuditResult : null
+      if (audit) setSiteAudit(audit)
       const rnk = (rankData.data ?? []) as RankingRow[]
       if (rnk.length > 0) setRankings(rnk)
       if (rankData.config) setRankConfig(rankData.config)
@@ -1461,13 +1480,13 @@ export default function ClientDashboard() {
       const cg4 = currData?.ga4?.totals as Partial<GA4Totals> | undefined
       const cai = currData?.aiTraffic as AITrafficData | null | undefined
       const blParam = currBL !== null ? { current: currBL, previous: prevBL } : undefined
-      const currH = calcHealthScore(cg, cg4, cai, rnk, blParam)
+      const currH = calcHealthScore(cg, cg4, cai, rnk, blParam, audit)
 
       // Calculate score for previous period (for comparison badge)
       const pg = prevData?.gsc?.totals as GSCTotals | undefined
       const pg4 = prevData?.ga4?.totals as Partial<GA4Totals> | undefined
       const pai = prevData?.aiTraffic as AITrafficData | null | undefined
-      const prevH = calcHealthScore(pg, pg4, pai, rnk)
+      const prevH = calcHealthScore(pg, pg4, pai, rnk, undefined, audit)
 
       const changeReason = getScoreChangeReason(currH.comps, prevH.comps)
 
