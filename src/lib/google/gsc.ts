@@ -59,7 +59,7 @@ export async function getGSCMetrics(
     }),
     client.searchanalytics.query({
       siteUrl,
-      requestBody: { startDate, endDate, dimensions: ["date"], rowLimit: 90 },
+      requestBody: { startDate, endDate, dimensions: ["date"], rowLimit: 25000 },
     }),
   ])
 

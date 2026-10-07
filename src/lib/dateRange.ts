@@ -5,6 +5,8 @@ export function getDateRange(range: string): { startDate: string; endDate: strin
   const end = format(today, "yyyy-MM-dd")
 
   switch (range) {
+    case "all":
+      return { startDate: format(startOfMonth(subMonths(today, 15)), "yyyy-MM-dd"), endDate: end }
     case "7d":
       return { startDate: format(subDays(today, 7), "yyyy-MM-dd"), endDate: end }
     case "28d":
@@ -32,6 +34,7 @@ export function getDateRange(range: string): { startDate: string; endDate: strin
 }
 
 export const DATE_PRESETS = [
+  { label: "All available (16 months)", value: "all" },
   { label: "Last 7 days", value: "7d" },
   { label: "Last 28 days", value: "28d" },
   { label: "Last 30 days", value: "30d" },

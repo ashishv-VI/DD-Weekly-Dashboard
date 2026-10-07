@@ -64,10 +64,29 @@ export default function DashboardPage() {
   }
 
   const trendData = data
-    ? data.gsc.daily.map((d) => {
-        const ga4 = data.ga4.daily.find((g) => g.date === d.date)
-        return { date: d.date, Clicks: d.clicks, Sessions: ga4?.sessions ?? 0 }
-      })
+    ? dateRange === "all"
+      ? (() => {
+          const monthly = new Map<string, { date: string; Clicks: number; Sessions: number }>()
+          for (const row of data.gsc.daily) {
+            const month = row.date.slice(0, 7)
+            const totals = monthly.get(month) ?? { date: month, Clicks: 0, Sessions: 0 }
+            totals.Clicks += row.clicks
+            monthly.set(month, totals)
+          }
+          for (const row of data.ga4.daily) {
+            const month = row.date.slice(0, 7)
+            const totals = monthly.get(month) ?? { date: month, Clicks: 0, Sessions: 0 }
+            totals.Sessions += row.sessions
+            monthly.set(month, totals)
+          }
+          return [...monthly.values()]
+            .sort((a, b) => a.date.localeCompare(b.date))
+            .map((row) => ({ ...row, date: `${row.date}-01` }))
+        })()
+      : data.gsc.daily.map((d) => {
+          const ga4 = data.ga4.daily.find((g) => g.date === d.date)
+          return { date: d.date, Clicks: d.clicks, Sessions: ga4?.sessions ?? 0 }
+        })
     : []
 
   if (!property || showSelector) {
@@ -122,6 +141,7 @@ export default function DashboardPage() {
           ) : (
             <TrendChart
               data={trendData}
+              monthly={dateRange === "all"}
               series={[
                 { key: "Clicks", label: "Clicks (GSC)", color: "#2563eb" },
                 { key: "Sessions", label: "Sessions (GA4)", color: "#16a34a" },

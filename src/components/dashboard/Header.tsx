@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react"
 import { ChevronDown } from "lucide-react"
 
 const DATE_RANGES = [
+  { label: "All available (16 months)", value: "all" },
   { label: "Last 7 days", value: "7d" },
   { label: "Last 30 days", value: "30d" },
   { label: "Last 90 days", value: "90d" },

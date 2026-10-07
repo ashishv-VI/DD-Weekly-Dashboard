@@ -14,12 +14,13 @@ interface TrendChartProps {
   series: Series[]
   height?: number
   formatY?: (v: number) => string
+  monthly?: boolean
 }
 
-function formatDate(dateStr: string) {
+function formatDate(dateStr: string, monthly = false) {
   try {
     const cleaned = dateStr.replace(/(\d{4})(\d{2})(\d{2})/, "$1-$2-$3")
-    return format(parseISO(cleaned), "MMM d")
+    return format(parseISO(cleaned), monthly ? "MMM yyyy" : "MMM d")
   } catch {
     return dateStr
   }
@@ -30,7 +31,7 @@ function formatK(v: number) {
   return v.toString()
 }
 
-export function TrendChart({ data, series, height = 240, formatY = formatK }: TrendChartProps) {
+export function TrendChart({ data, series, height = 240, formatY = formatK, monthly = false }: TrendChartProps) {
   if (!data.length) {
     return (
       <div className="flex items-center justify-center text-sm" style={{ height, color: "var(--muted-foreground)" }}>
@@ -45,7 +46,7 @@ export function TrendChart({ data, series, height = 240, formatY = formatK }: Tr
         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
         <XAxis
           dataKey="date"
-          tickFormatter={formatDate}
+          tickFormatter={(value) => formatDate(String(value), monthly)}
           tick={{ fontSize: 11, fill: "#94a3b8" }}
           tickLine={false}
           axisLine={false}
@@ -66,7 +67,7 @@ export function TrendChart({ data, series, height = 240, formatY = formatK }: Tr
             fontSize: 12,
             boxShadow: "0 4px 6px -1px rgba(0,0,0,0.1)",
           }}
-          labelFormatter={(label) => formatDate(String(label))}
+          labelFormatter={(label) => formatDate(String(label), monthly)}
           formatter={(v, name) => [formatK(Number(v ?? 0)), String(name)]}
         />
         {series.length > 1 && (
