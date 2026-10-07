@@ -26,14 +26,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params
 
   const [client] = await db
-    .select({ id: clients.id, name: clients.name, notes: clients.notes })
+    .select({ id: clients.id, name: clients.name, slug: clients.slug, notes: clients.notes })
     .from(clients)
     .where(eq(clients.id, id))
     .limit(1)
 
   if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 })
 
-  const cfg = extractGsheetConfig(client.notes)
+  const cfg = extractGsheetConfig(client.notes, client.slug)
   if (!cfg) {
     return NextResponse.json({
       error: "No Google Sheets ranking config found. Set it up in Integrations → Keyword Rankings first.",

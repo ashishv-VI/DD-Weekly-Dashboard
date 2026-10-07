@@ -49,7 +49,7 @@ export function parseMonthColumn(col: string): string | null {
   const lower = clean.toLowerCase()
 
   // "Jun'26" / "Jul 26" / "Aug-26" / "Sept'26"
-  const short = lower.match(/^([a-z]{3,9})['\s\-_](\d{2})$/)
+  const short = lower.match(/^([a-z]{3,9})['’\s\-_](\d{2})$/)
   if (short) {
     const mo = MONTH_MAP[short[1]]
     if (mo) return `20${short[2]}-${mo}`
@@ -97,19 +97,33 @@ function parseCSV(text: string): string[][] {
 
 // ─── Fetch raw sheet ──────────────────────────────────────────────────────────
 
-async function fetchSheetCSV(gsheetUrl: string, gsheetTab: string): Promise<{ allRows: string[][]; error?: string }> {
+/**
+ * CSV export URL for a Google Sheets link, or null if it isn't one. Handles:
+ *   - normal links  …/spreadsheets/d/<id>/edit   → read by tab name
+ *   - published links  …/spreadsheets/d/e/2PACX-…/pubhtml  ("File → Share → Publish to web")
+ *     → read by the gid in the link (first tab if none)
+ */
+export function sheetCsvUrl(gsheetUrl: string, gsheetTab: string): string | null {
+  const pub = gsheetUrl.match(/\/spreadsheets\/d\/e\/([a-zA-Z0-9_-]+)/)
+  if (pub) {
+    const gid = gsheetUrl.match(/[?&#]gid=(\d+)/)?.[1]
+    return `https://docs.google.com/spreadsheets/d/e/${pub[1]}/pub?output=csv${gid ? `&gid=${gid}` : ""}`
+  }
   const match = gsheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/)
-  if (!match) return { allRows: [], error: "Invalid Google Sheets URL" }
+  if (!match) return null
+  return `https://docs.google.com/spreadsheets/d/${match[1]}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(gsheetTab || "Sheet1")}`
+}
 
-  const sheetId = match[1]
-  const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(gsheetTab || "Sheet1")}`
+async function fetchSheetCSV(gsheetUrl: string, gsheetTab: string): Promise<{ allRows: string[][]; error?: string }> {
+  const csvUrl = sheetCsvUrl(gsheetUrl, gsheetTab)
+  if (!csvUrl) return { allRows: [], error: "Invalid Google Sheets URL" }
 
   try {
     const res = await fetch(csvUrl, { headers: { "User-Agent": "Mozilla/5.0" }, next: { revalidate: 0 } })
     if (!res.ok) return { allRows: [], error: `HTTP ${res.status}` }
     const text = await res.text()
-    if (text.includes("google-visualization-errors"))
-      return { allRows: [], error: "Sheet not found or not public. Enable 'Anyone with link can view'." }
+    if (text.includes("google-visualization-errors") || /^\s*<(!doctype|html)/i.test(text))
+      return { allRows: [], error: "Sheet not found or not public. Enable 'Anyone with link can view' or 'Publish to web'." }
     const allRows = parseCSV(text)
     if (!allRows.length) return { allRows: [], error: "Sheet is empty" }
     return { allRows }
@@ -191,26 +205,53 @@ export async function fetchAllMonthRankings(
   return { months }
 }
 
+// ─── Built-in sheets ──────────────────────────────────────────────────────────
+
+/**
+ * Ranking sheets wired in code, keyed by client slug — these clients need no
+ * admin setup. A sheet configured in the admin panel still takes priority.
+ * The sheet must be public ("Anyone with the link can view").
+ */
+const BUILT_IN_SHEETS: Record<string, { gsheetUrl: string; gsheetTab: string; keywordCol: string }> = {
+  kodacars: {
+    // "Publish to web" link — keeps working even if the sheet's sharing settings change
+    gsheetUrl: "https://docs.google.com/spreadsheets/d/e/2PACX-1vSXhmZROimNwM-VqUDiUM8Rpeoti-O29TXCjgcnvYU13_akY0VuQ23p_RXuNiXE-LkowQ94S74GHvhF/pubhtml",
+    gsheetTab: "Sheet1",
+    keywordCol: "Keyword",
+  },
+}
+
+/** Built-in sheet for a client slug, or null */
+export function builtInGsheetConfig(slug: string | null | undefined) {
+  const s = slug ? BUILT_IN_SHEETS[slug.toLowerCase()] : undefined
+  if (!s) return null
+  return { gsheetUrl: s.gsheetUrl, gsheetTab: s.gsheetTab, mapping: { keyword: s.keywordCol, currentRank: "" } as RankingMapping }
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Parse the client.notes JSON and return rankingConfig if it's a gsheet config */
-export function extractGsheetConfig(notes: string | null): {
+/**
+ * Return the client's Google Sheet ranking config: the one saved in client.notes
+ * (admin panel) if any, otherwise the built-in sheet for the client's slug.
+ */
+export function extractGsheetConfig(notes: string | null, slug?: string | null): {
   gsheetUrl: string
   gsheetTab: string
   mapping: RankingMapping
 } | null {
-  if (!notes) return null
-  try {
-    const p = JSON.parse(notes)
-    if (p?._v === 1 && p.rankingConfig?.type === "gsheet" && p.rankingConfig.gsheetUrl) {
-      return {
-        gsheetUrl: p.rankingConfig.gsheetUrl,
-        gsheetTab: p.rankingConfig.gsheetTab ?? "Sheet1",
-        mapping: p.rankingConfig.mapping,
+  if (notes) {
+    try {
+      const p = JSON.parse(notes)
+      if (p?._v === 1 && p.rankingConfig?.type === "gsheet" && p.rankingConfig.gsheetUrl) {
+        return {
+          gsheetUrl: p.rankingConfig.gsheetUrl,
+          gsheetTab: p.rankingConfig.gsheetTab ?? "Sheet1",
+          mapping: p.rankingConfig.mapping,
+        }
       }
-    }
-  } catch {}
-  return null
+    } catch {}
+  }
+  return builtInGsheetConfig(slug)
 }
 
 /** Return current month as "YYYY-MM" */

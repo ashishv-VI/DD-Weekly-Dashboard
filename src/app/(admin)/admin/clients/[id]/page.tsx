@@ -2,6 +2,7 @@
 import { useEffect, useState, useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
+import { parseMonthColumn } from "@/lib/gsheet-rankings"
 
 type Tab = "profile" | "integrations" | "access" | "danger"
 
@@ -149,7 +150,7 @@ const INDUSTRIES = ["Technology", "E-commerce", "Healthcare", "Finance", "Real E
 
 interface KwRow { keyword: string; position: string }
 
-function KeywordRankingsHistoryCard({ clientId }: { clientId: string }) {
+function KeywordRankingsHistoryCard({ clientId, refreshKey }: { clientId: string; refreshKey: number }) {
   const now = new Date()
   const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
 
@@ -180,7 +181,7 @@ function KeywordRankingsHistoryCard({ clientId }: { clientId: string }) {
       .finally(() => setLoadingHistory(false))
   }
 
-  useEffect(() => { loadHistory() }, [clientId]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadHistory() }, [clientId, refreshKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const addRow = () => setRows(r => [...r, { keyword: "", position: "" }])
   const removeRow = (i: number) => setRows(r => r.filter((_, idx) => idx !== i))
@@ -333,7 +334,7 @@ function KeywordRankingsHistoryCard({ clientId }: { clientId: string }) {
         </div>
 
         <p className="text-xs text-emerald-500">
-          ⚡ Auto-runs on 1st of every month at 06:00 UTC for all clients.
+          ⚡ Auto-syncs every month column daily at 06:00 UTC. The client dashboard also reads the sheet live, so edits show up immediately.
         </p>
       </div>
 
@@ -459,8 +460,10 @@ function KeywordRankingsHistoryCard({ clientId }: { clientId: string }) {
   )
 }
 
-function RankingConfigCard({ config, onSave }: { config: RankingConfig | null; onSave: (cfg: RankingConfig) => void }) {
+function RankingConfigCard({ clientId, config, onSave, onHistorySaved }: { clientId: string; config: RankingConfig | null; onSave: (cfg: RankingConfig) => void; onHistorySaved: () => void }) {
   const [open, setOpen] = useState(false)
+  const [savingHistory, setSavingHistory] = useState(false)
+  const [historyMsg, setHistoryMsg] = useState<{ type: "ok" | "err"; msg: string } | null>(null)
   const [srcType, setSrcType] = useState<"excel" | "gsheet">("excel")
   const [headers, setHeaders] = useState<string[]>([])
   const [rawRows, setRawRows] = useState<string[][]>([])
@@ -479,6 +482,47 @@ function RankingConfigCard({ config, onSave }: { config: RankingConfig | null; o
   const fmtColLabel = (h: string) => {
     if (!isExcelDate(h)) return h
     return new Date(Math.round((Number(h) - 25569) * 86400000)).toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" })
+  }
+  // "YYYY-MM" a column header refers to (Excel date serial, Jun'26, June 2026, 2026-06-01…), or null
+  const colMonth = (h: string): string | null => {
+    if (isExcelDate(h)) return new Date(Math.round((Number(h) - 25569) * 86400000)).toISOString().slice(0, 7)
+    const t = h.trim()
+    return parseMonthColumn(t) ?? (/^\d{4}-\d{2}-\d{2}/.test(t) ? t.slice(0, 7) : null)
+  }
+  const shiftMonth = (m: string, by: number) => {
+    const [y, mo] = m.split("-").map(Number)
+    const d = new Date(Date.UTC(y, mo - 1 + by, 1))
+    return d.toISOString().slice(0, 7)
+  }
+
+  // Save every month column in the uploaded file to keyword_rankings history.
+  // Each month only replaces itself, so months from earlier uploads are kept.
+  async function saveMonthsToHistory(ki: number, pi: number, ri: number) {
+    let cols = headers
+      .map((h, i) => ({ i, month: colMonth(h) }))
+      .filter((c): c is { i: number; month: string } => c.i !== ki && c.month !== null)
+    if (cols.length === 0) {
+      // Headers aren't dates (e.g. "Previous" / "Current") — assume current month and the one before
+      const now = new Date().toISOString().slice(0, 7)
+      cols = [{ i: pi, month: shiftMonth(now, -1) }, { i: ri, month: now }]
+    }
+    const pos = (v: unknown) => { const n = parseInt(String(v ?? "").trim(), 10); return isNaN(n) || n <= 0 ? null : n }
+    const saved: string[] = []
+    for (const { i, month } of cols) {
+      const rankings = rawRows.slice(1)
+        .map(row => ({ keyword: String(row[ki] ?? "").trim(), position: pos(row[i]) }))
+        .filter(r => r.keyword)
+      // Skip empty columns so a blank month never wipes saved data
+      if (!rankings.some(r => r.position !== null)) continue
+      const res = await fetch(`/api/admin/clients/${clientId}/keyword-rankings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ month, rankings }),
+      })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `Failed to save ${month}`)
+      saved.push(month)
+    }
+    return saved
   }
 
   function autoMap(cols: string[]) {
@@ -540,7 +584,7 @@ function RankingConfigCard({ config, onSave }: { config: RankingConfig | null; o
     finally { setFetching(false) }
   }
 
-  function handleSaveConfig() {
+  async function handleSaveConfig() {
     if (!mapping.keyword || !mapping.prevRank || !mapping.currentRank) {
       setErr("Keyword, Previous Rank, and Current Rank are required."); return
     }
@@ -559,6 +603,20 @@ function RankingConfigCard({ config, onSave }: { config: RankingConfig | null; o
       }))
       .filter(r => r.keyword)
     if (srcType === "excel" && data.length > 2000) { data = data.slice(0, 2000); setErr("Truncated to 2000 rows max.") }
+    setHistoryMsg(null)
+    if (srcType === "excel") {
+      setSavingHistory(true)
+      try {
+        const saved = await saveMonthsToHistory(ki, pi, ri)
+        if (saved.length) {
+          const label = (m: string) => new Date(`${m}-01T00:00:00`).toLocaleDateString("en-GB", { month: "short", year: "numeric" })
+          setHistoryMsg({ type: "ok", msg: `Added to ranking history: ${saved.map(label).join(", ")}. Earlier months were kept.` })
+          onHistorySaved()
+        }
+      } catch (e) {
+        setHistoryMsg({ type: "err", msg: `Ranking history not updated: ${e instanceof Error ? e.message : "save failed"}` })
+      } finally { setSavingHistory(false) }
+    }
     onSave({ type: srcType, gsheetUrl: srcType === "gsheet" ? gsheetUrl : "", gsheetTab: srcType === "gsheet" ? gsheetTab : "", mapping, data: srcType === "excel" ? data : [], rowCount: data.length, updatedAt: new Date().toISOString().slice(0, 10) })
     setOpen(false); setHeaders([]); setRawRows([])
   }
@@ -608,6 +666,12 @@ function RankingConfigCard({ config, onSave }: { config: RankingConfig | null; o
             {config.type === "gsheet" && <p className="text-gray-400 mt-1 truncate">Sheet: {config.gsheetUrl}</p>}
             <p className="text-gray-400 mt-0.5">Columns: {config.mapping.keyword} → Prev: {fmtColLabel(config.mapping.prevRank)} → Current: {fmtColLabel(config.mapping.currentRank)}</p>
           </div>
+        )}
+
+        {historyMsg && !open && (
+          <p className={`text-xs px-3 py-2 rounded-lg border mb-3 ${historyMsg.type === "ok" ? "bg-green-50 text-green-700 border-green-200" : "bg-red-50 text-red-600 border-red-200"}`}>
+            {historyMsg.msg}
+          </p>
         )}
 
         {!open ? (
@@ -729,9 +793,9 @@ function RankingConfigCard({ config, onSave }: { config: RankingConfig | null; o
             <div className="flex gap-2 pt-1">
               <button type="button" onClick={() => { setOpen(false); setHeaders([]); setRawRows([]) }}
                 className="text-xs text-gray-500 px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
-              <button type="button" onClick={handleSaveConfig} disabled={!canSave}
+              <button type="button" onClick={handleSaveConfig} disabled={!canSave || savingHistory}
                 className="text-xs bg-blue-600 text-white px-4 py-1.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors font-medium">
-                Save Configuration
+                {savingHistory ? "Saving…" : "Save Configuration"}
               </button>
             </div>
           </div>
@@ -750,6 +814,7 @@ export default function ClientDetailPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
+  const [kwHistoryKey, setKwHistoryKey] = useState(0)
 
   const logoInputRef = useRef<HTMLInputElement>(null)
   const [form, setForm] = useState({
@@ -1108,11 +1173,11 @@ export default function ClientDetailPage() {
               </div>
             </div>
 
-            <RankingConfigCard config={form.rankingConfig} onSave={(cfg) => setForm(f => ({ ...f, rankingConfig: cfg }))} />
+            <RankingConfigCard clientId={id} config={form.rankingConfig} onSave={(cfg) => setForm(f => ({ ...f, rankingConfig: cfg }))} onHistorySaved={() => setKwHistoryKey(k => k + 1)} />
 
             <BacklinksCard months={form.backlinkMonths} onSave={(months) => setForm(f => ({ ...f, backlinkMonths: months }))} />
 
-            <KeywordRankingsHistoryCard clientId={id} />
+            <KeywordRankingsHistoryCard clientId={id} refreshKey={kwHistoryKey} />
 
             <div className="flex items-center justify-end pt-2">
               <button type="submit" disabled={saving}

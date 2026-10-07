@@ -1371,6 +1371,9 @@ export default function ClientDashboard() {
   // Keyword ranking history (from database)
   const [kwHistory, setKwHistory] = useState<{ keywords: string[]; months: string[]; data: Record<string, Record<string, number | null>> } | null>(null)
   const [kwHistoryLoading, setKwHistoryLoading] = useState(false)
+  // Months picked in the history "Compare" selector ("" = default: previous vs latest)
+  const [kwCompareFrom, setKwCompareFrom] = useState("")
+  const [kwCompareTo, setKwCompareTo] = useState("")
 
   useEffect(() => {
     fetch("/api/client/me").then(r => { if (!r.ok) { router.push("/client/login"); return null }; return r.json() })
@@ -3352,8 +3355,14 @@ export default function ClientDashboard() {
                   const { keywords, months, data } = kwHistory
                   const kwMonthLabel = (m: string) => {
                     const [y, mo] = m.split("-")
-                    return new Date(parseInt(y), parseInt(mo) - 1, 1).toLocaleDateString("en-GB", { month: "short", year: "numeric" })
+                    return new Date(parseInt(y), parseInt(mo) - 1, 1).toLocaleDateString("en-GB", { month: "long", year: "numeric" })
                   }
+                  // Months being compared — defaults to previous vs latest; ignores stale picks
+                  const cmpTo = months.includes(kwCompareTo) ? kwCompareTo : months[0]
+                  const cmpFrom = months.includes(kwCompareFrom) && kwCompareFrom !== cmpTo
+                    ? kwCompareFrom
+                    : months.find(m => m < cmpTo) ?? months.find(m => m !== cmpTo) ?? ""
+                  const canCompare = months.length >= 2 && !!cmpFrom
                   const kwPosColor = (pos: number | null | undefined): string => {
                     if (pos === null || pos === undefined) return "text-slate-300"
                     if (pos <= 3) return "text-green-700"
@@ -3369,18 +3378,16 @@ export default function ClientDashboard() {
                     return ""
                   }
                   const kwGetDelta = (kw: string): number | null => {
-                    if (months.length < 2) return null
-                    const curr = data[kw]?.[months[0]] ?? null
-                    const prev = data[kw]?.[months[1]] ?? null
+                    if (!canCompare) return null
+                    const curr = data[kw]?.[cmpTo] ?? null
+                    const prev = data[kw]?.[cmpFrom] ?? null
                     if (curr === null || prev === null) return null
                     return curr - prev // negative = moved up = good
                   }
-                  // Summary stats
+                  // Summary stats (for the "to" month of the comparison)
                   const improved = keywords.filter(kw => { const d = kwGetDelta(kw); return d !== null && d < 0 }).length
                   const declined = keywords.filter(kw => { const d = kwGetDelta(kw); return d !== null && d > 0 }).length
-                  const top10Count = months.length > 0
-                    ? keywords.filter(kw => { const p = data[kw]?.[months[0]] ?? null; return p !== null && p <= 10 }).length
-                    : 0
+                  const top10Count = keywords.filter(kw => { const p = data[kw]?.[cmpTo] ?? null; return p !== null && p <= 10 }).length
 
                   return (
                     <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
@@ -3401,7 +3408,7 @@ export default function ClientDashboard() {
                             <div className="text-base font-bold text-blue-700">{top10Count}</div>
                             <div className="text-xs text-slate-400">Top 10</div>
                           </div>
-                          {months.length >= 2 && <>
+                          {canCompare && <>
                             <div className="text-center">
                               <div className="text-base font-bold text-green-600">{improved}</div>
                               <div className="text-xs text-slate-400">Improved</div>
@@ -3419,6 +3426,26 @@ export default function ClientDashboard() {
                         </div>
                       </div>
 
+                      {/* Compare selector */}
+                      {months.length >= 2 && (
+                        <div className="px-5 py-3 border-b border-slate-100 bg-slate-50/60 flex items-center gap-2 flex-wrap text-xs">
+                          <span className="font-semibold text-slate-600">Compare</span>
+                          <select value={cmpFrom} onChange={e => setKwCompareFrom(e.target.value)}
+                            className="border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            {months.filter(m => m !== cmpTo).map(m => <option key={m} value={m}>{kwMonthLabel(m)}</option>)}
+                          </select>
+                          <span className="text-slate-400">→</span>
+                          <select value={cmpTo} onChange={e => setKwCompareTo(e.target.value)}
+                            className="border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            {months.map(m => <option key={m} value={m}>{kwMonthLabel(m)}</option>)}
+                          </select>
+                          {(kwCompareFrom || kwCompareTo) && (
+                            <button type="button" onClick={() => { setKwCompareFrom(""); setKwCompareTo("") }}
+                              className="text-blue-600 hover:text-blue-800 font-medium ml-1">Reset to latest</button>
+                          )}
+                        </div>
+                      )}
+
                       {/* Table */}
                       <div className="overflow-x-auto">
                         <table className="w-full text-xs">
@@ -3426,9 +3453,14 @@ export default function ClientDashboard() {
                             <tr>
                               <th className="text-left px-4 py-3 font-semibold text-slate-600 min-w-[200px] sticky left-0 bg-slate-50 z-10 border-r border-slate-100">Keyword</th>
                               {months.map(m => (
-                                <th key={m} className="text-center px-3 py-3 font-semibold text-slate-600 whitespace-nowrap min-w-[80px]">{kwMonthLabel(m)}</th>
+                                <th key={m} className={`text-center px-3 py-3 font-semibold whitespace-nowrap min-w-[80px] ${m === cmpFrom || m === cmpTo ? "text-blue-700 bg-blue-50/70" : "text-slate-600"}`}>{kwMonthLabel(m)}</th>
                               ))}
-                              {months.length >= 2 && <th className="text-center px-3 py-3 font-semibold text-slate-500 whitespace-nowrap min-w-[72px] bg-slate-100/60">Change</th>}
+                              {canCompare && (
+                                <th className="text-center px-3 py-3 font-semibold text-slate-500 whitespace-nowrap min-w-[72px] bg-slate-100/60">
+                                  Change
+                                  <div className="text-[10px] font-normal text-slate-400">{kwMonthLabel(cmpFrom)} → {kwMonthLabel(cmpTo)}</div>
+                                </th>
+                              )}
                             </tr>
                           </thead>
                           <tbody>
@@ -3445,7 +3477,7 @@ export default function ClientDashboard() {
                                       </td>
                                     )
                                   })}
-                                  {months.length >= 2 && (
+                                  {canCompare && (
                                     <td className="px-3 py-2.5 text-center tabular-nums font-semibold bg-slate-50/60">
                                       {delta === null ? (
                                         <span className="text-slate-300">—</span>

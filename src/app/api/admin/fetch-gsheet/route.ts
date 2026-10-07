@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic"
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/auth"
+import { sheetCsvUrl } from "@/lib/gsheet-rankings"
 
 function parseCSV(text: string): string[][] {
   const rows: string[][] = []
@@ -29,11 +30,8 @@ export async function GET(req: Request) {
   const url = searchParams.get("url") ?? ""
   const tab = searchParams.get("tab") ?? "Sheet1"
 
-  const match = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/)
-  if (!match) return NextResponse.json({ error: "Invalid Google Sheets URL" }, { status: 400 })
-
-  const sheetId = match[1]
-  const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tab)}`
+  const csvUrl = sheetCsvUrl(url, tab)
+  if (!csvUrl) return NextResponse.json({ error: "Invalid Google Sheets URL" }, { status: 400 })
 
   try {
     const res = await fetch(csvUrl, { headers: { "User-Agent": "Mozilla/5.0" } })
