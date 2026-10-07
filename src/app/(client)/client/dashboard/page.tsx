@@ -1419,7 +1419,8 @@ export default function ClientDashboard() {
     setMonthlyScore(null) // reset to show loading skeleton while recalculating
 
     const now = new Date()
-    const fmtDate = (d: Date) => d.toISOString().split("T")[0]
+    // Local date parts — toISOString() converts to UTC and shifts dates back a day east of UTC
+    const fmtDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
 
     let currStart: Date, currEnd: Date, prevStart: Date, prevEnd: Date
     let monthLabel: string, prevMonthLabel: string
@@ -1441,16 +1442,27 @@ export default function ClientDashboard() {
       currMonthKey = `${currStart.getFullYear()}-${String(currStart.getMonth() + 1).padStart(2, "0")}`
       prevMonthKey = `${prevStart.getFullYear()}-${String(prevStart.getMonth() + 1).padStart(2, "0")}`
     } else {
-      // Default: current calendar month (1st → yesterday) vs previous calendar month
-      const yd = new Date(now); yd.setDate(now.getDate() - 1)
-      currStart = new Date(now.getFullYear(), now.getMonth(), 1)
-      currEnd = yd
-      prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-      prevEnd = new Date(now.getFullYear(), now.getMonth(), 0)
+      // Default: current calendar month vs previous calendar month.
+      // Search Console finalises data ~3 days late, so the month-to-date window ends 3 days ago.
+      // Until 10 days of complete data exist, score the last full month instead —
+      // a few days of data is too small a sample for a headline score.
+      const MIN_DAYS = 10
+      const lastComplete = new Date(now); lastComplete.setDate(now.getDate() - 3)
+      const useLastFullMonth = lastComplete.getMonth() !== now.getMonth() || lastComplete.getDate() < MIN_DAYS
+      const ref = useLastFullMonth ? new Date(now.getFullYear(), now.getMonth() - 1, 1) : now
 
-      monthLabel = now.toLocaleDateString("en-GB", { month: "long", year: "numeric" })
+      currStart = new Date(ref.getFullYear(), ref.getMonth(), 1)
+      currEnd = useLastFullMonth ? new Date(ref.getFullYear(), ref.getMonth() + 1, 0) : lastComplete
+      prevStart = new Date(ref.getFullYear(), ref.getMonth() - 1, 1)
+      prevEnd = new Date(ref.getFullYear(), ref.getMonth(), 0)
+
+      monthLabel = ref.toLocaleDateString("en-GB", { month: "long", year: "numeric" })
+      if (useLastFullMonth) {
+        const firstScoreDay = new Date(now.getFullYear(), now.getMonth(), MIN_DAYS + 3)
+        monthLabel += ` · ${now.toLocaleDateString("en-GB", { month: "long" })} score from ${firstScoreDay.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`
+      }
       prevMonthLabel = prevStart.toLocaleDateString("en-GB", { month: "long", year: "numeric" })
-      currMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
+      currMonthKey = `${ref.getFullYear()}-${String(ref.getMonth() + 1).padStart(2, "0")}`
       prevMonthKey = `${prevStart.getFullYear()}-${String(prevStart.getMonth() + 1).padStart(2, "0")}`
     }
 
