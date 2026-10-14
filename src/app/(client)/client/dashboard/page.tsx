@@ -2972,11 +2972,11 @@ export default function ClientDashboard() {
                     <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between flex-wrap gap-3">
                       <div>
                         <div className="text-sm font-semibold text-slate-900">Keyword → Landing Page → Performance</div>
-                        <div className="text-xs text-slate-400 mt-0.5">GSC search data joined with GA4 page metrics · {enrichedKwp.length} mappings</div>
+                        <div className="text-xs text-slate-400 mt-0.5">Which page ranks for each keyword in Google Search · {enrichedKwp.length} mappings</div>
                       </div>
                       <ExportBtn onClick={() => downloadCSV("keyword-pages.csv",
-                        ["Keyword", "Landing Page", "Clicks", "Impressions", "Avg Position", "Page Users", "Avg Eng Time", "Conversions"],
-                        enrichedKwp.map(k => [k.keyword, formatPageUrl(k.page), k.clicks, k.impressions, k.position.toFixed(1), k.ga4?.users ?? "—", k.ga4 ? fmtDur(k.ga4.avgEngagementTime) : "—", k.ga4?.conversions ?? "—"])
+                        ["Keyword", "Landing Page", "Clicks", "Impressions", "Avg Position"],
+                        enrichedKwp.map(k => [k.keyword, formatPageUrl(k.page), k.clicks, k.impressions, k.position.toFixed(1)])
                       )} />
                     </div>
                     <div className="overflow-x-auto">
@@ -2988,9 +2988,6 @@ export default function ClientDashboard() {
                             <th className={`${thBase} text-right`}>Clicks</th>
                             <th className={`${thBase} text-right`}>Impressions</th>
                             <th className={`${thBase} text-right`}>Avg Position</th>
-                            <th className={`${thBase} text-right`}>Page Users</th>
-                            <th className={`${thBase} text-right`}>Avg Eng. Time</th>
-                            <th className={`${thBase} text-right`}>Conversions</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
@@ -3005,9 +3002,6 @@ export default function ClientDashboard() {
                                   {kw.position.toFixed(1)}
                                 </span>
                               </td>
-                              <td className="px-4 py-2.5 text-right text-sm tabular-nums text-slate-600">{kw.ga4 ? fmt(kw.ga4.users) : <span className="text-slate-300">—</span>}</td>
-                              <td className="px-4 py-2.5 text-right text-sm tabular-nums text-slate-600">{kw.ga4 ? fmtDur(kw.ga4.avgEngagementTime) : <span className="text-slate-300">—</span>}</td>
-                              <td className="px-4 py-2.5 text-right text-sm tabular-nums text-slate-600">{kw.ga4 ? fmt(kw.ga4.conversions) : <span className="text-slate-300">—</span>}</td>
                             </tr>
                           ))}
                         </tbody>
