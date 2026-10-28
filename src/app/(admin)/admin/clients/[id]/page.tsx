@@ -525,14 +525,20 @@ function RankingConfigCard({ clientId, config, onSave, onHistorySaved }: { clien
     return saved
   }
 
-  function autoMap(cols: string[]) {
+  function autoMap(cols: string[], dataRows: unknown[][]) {
     const find = (patterns: string[]) => cols.find(c => patterns.some(p => c.toLowerCase().includes(p))) ?? ""
-    // Auto-detect date serial columns (e.g. "46113", "46143") — sort ascending so older date = prev
-    const dateCols = cols.filter(isExcelDate).sort((a, b) => Number(a) - Number(b))
+    // Month columns (Excel dates, Jun'26, June 2026…) — the two latest that have rankings become prev / current
+    const hasRanks = (i: number) => dataRows.some(row => parseInt(String(row[i] ?? ""), 10) > 0)
+    const monthCols = cols
+      .map((c, i) => ({ c, month: colMonth(c), ranked: hasRanks(i) }))
+      .filter((m): m is { c: string; month: string; ranked: boolean } => m.month !== null && m.ranked)
+      .sort((a, b) => a.month.localeCompare(b.month))
+      .map(m => m.c)
+    const [prevCol, currCol] = monthCols.length >= 2 ? monthCols.slice(-2) : ["", ""]
     setMapping({
       keyword: find(["keyword", "search term", "query", "key word"]),
-      prevRank: dateCols[0] || find(["prev", "last", "previous", "old", "before", "feb", "jan", "mar"]),
-      currentRank: dateCols[1] || find(["curr", "current", "now", "this", "latest", "new", "apr", "may", "jun"]),
+      prevRank: prevCol || find(["prev", "last", "previous", "old", "before", "feb", "jan", "mar"]),
+      currentRank: currCol || find(["curr", "current", "now", "this", "latest", "new", "apr", "may", "jun"]),
       volume: find(["volume", "vol", "search vol", "searches", "monthly"]),
       url: find(["url", "page", "landing", "link", "slug"]),
       location: find(["location", "country", "region", "city", "market", "geo"]),
@@ -547,7 +553,7 @@ function RankingConfigCard({ clientId, config, onSave, onHistorySaved }: { clien
     setRawRows(rows)
     const hdrs = (rows[0] ?? []).map(String)
     setHeaders(hdrs)
-    autoMap(hdrs)
+    autoMap(hdrs, rows.slice(1))
   }
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -579,7 +585,7 @@ function RankingConfigCard({ clientId, config, onSave, onHistorySaved }: { clien
       if (!res.ok || d.error) throw new Error(d.error ?? "Failed to fetch")
       setHeaders(d.headers)
       setRawRows([d.headers, ...d.preview])
-      autoMap(d.headers)
+      autoMap(d.headers, d.preview)
     } catch (e) { setErr(e instanceof Error ? e.message : "Could not fetch sheet") }
     finally { setFetching(false) }
   }

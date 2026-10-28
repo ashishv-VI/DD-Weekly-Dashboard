@@ -209,7 +209,8 @@ export async function fetchAllMonthRankings(
 
 /**
  * Ranking sheets wired in code, keyed by client slug — these clients need no
- * admin setup. A sheet configured in the admin panel still takes priority.
+ * admin setup. Rankings set up in the admin panel (a sheet or an Excel/CSV
+ * upload) take priority and switch the built-in sheet off.
  * The sheet must be public ("Anyone with the link can view").
  */
 const BUILT_IN_SHEETS: Record<string, { gsheetUrl: string; gsheetTab: string; keywordCol: string }> = {
@@ -233,6 +234,8 @@ export function builtInGsheetConfig(slug: string | null | undefined) {
 /**
  * Return the client's Google Sheet ranking config: the one saved in client.notes
  * (admin panel) if any, otherwise the built-in sheet for the client's slug.
+ * Returns null when rankings were uploaded as Excel/CSV in the admin panel, so the
+ * built-in sheet can't overwrite the uploaded months.
  */
 export function extractGsheetConfig(notes: string | null, slug?: string | null): {
   gsheetUrl: string
@@ -242,6 +245,7 @@ export function extractGsheetConfig(notes: string | null, slug?: string | null):
   if (notes) {
     try {
       const p = JSON.parse(notes)
+      if (p?._v === 1 && p.rankingConfig?.type === "excel") return null
       if (p?._v === 1 && p.rankingConfig?.type === "gsheet" && p.rankingConfig.gsheetUrl) {
         return {
           gsheetUrl: p.rankingConfig.gsheetUrl,

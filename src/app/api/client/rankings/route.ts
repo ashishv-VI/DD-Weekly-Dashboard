@@ -50,9 +50,9 @@ export async function GET() {
 
   const noCache = { headers: { "Cache-Control": "private, no-store" } }
 
-  // Built-in sheet (wired in code for this client) — used unless a Google Sheet is set up in admin.
-  // Compares the two latest month columns that have rankings.
-  const builtIn = rankingConfig?.type === "gsheet" ? null : builtInGsheetConfig(client.slug)
+  // Built-in sheet (wired in code for this client) — used unless rankings are set up in admin
+  // (Google Sheet or Excel/CSV upload). Compares the two latest month columns that have rankings.
+  const builtIn = rankingConfig ? null : builtInGsheetConfig(client.slug)
   if (builtIn) {
     const { months, error } = await fetchAllMonthRankings(builtIn.gsheetUrl, builtIn.gsheetTab, builtIn.mapping.keyword)
     const filled = months.filter(m => m.rows.some(r => r.position !== null)).sort((a, b) => a.month.localeCompare(b.month))
